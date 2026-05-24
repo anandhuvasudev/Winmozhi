@@ -21,7 +21,6 @@ public sealed partial class PopupView : Window
 
         _hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
 
-        // 1. Tell WinUI 3 to hide its default title bar
         AppWindow.TitleBar.ExtendsContentIntoTitleBar = true;
         var presenter = AppWindow.Presenter as OverlappedPresenter;
         if (presenter != null)
@@ -31,10 +30,7 @@ public sealed partial class PopupView : Window
             presenter.IsResizable = false;
         }
 
-        // 2. Win32 Magic: Make it a True Popup & Don't steal focus
         MakeWindowTruePopup(_hwnd);
-
-        // 3. Set exact size so there is no empty space
         AppWindow.Resize(new Windows.Graphics.SizeInt32(180, 260));
 
         ViewModel.PropertyChanged += ViewModel_PropertyChanged;
@@ -55,9 +51,9 @@ public sealed partial class PopupView : Window
                     y = mousePos.Y + 20;
                 }
 
-                AppWindow.Move(new Windows.Graphics.PointInt32((int)x + 10, (int)y + 10));
-                AppWindow.Show(false);
-                AppWindow.MoveInZOrderAtTop();
+                // Show the window, and forcefully push it to the top WITHOUT activating it
+                ShowWindow(_hwnd, SW_SHOWNOACTIVATE);
+                SetWindowPos(_hwnd, HWND_TOPMOST, (int)x + 10, (int)y + 10, 0, 0, SWP_NOSIZE | SWP_NOACTIVATE);
             }
             else
             {
@@ -72,6 +68,12 @@ public sealed partial class PopupView : Window
     const uint WS_POPUP = 0x80000000;
     const uint WS_EX_NOACTIVATE = 0x08000000;
     const uint WS_EX_TOOLWINDOW = 0x00000080;
+    const int SW_SHOWNOACTIVATE = 4;
+
+    // Windows Positioning Flags
+    static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
+    const uint SWP_NOSIZE = 0x0001;
+    const uint SWP_NOACTIVATE = 0x0010;
 
     [LibraryImport("user32.dll", SetLastError = true)]
     private static partial int GetWindowLongW(IntPtr hWnd, int nIndex);
@@ -83,14 +85,19 @@ public sealed partial class PopupView : Window
     [return: MarshalAs(UnmanagedType.Bool)]
     private static partial bool GetCursorPos(out InteropPoint lpPoint);
 
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+    [LibraryImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+
     public struct InteropPoint { public int X; public int Y; }
 
     private static void MakeWindowTruePopup(IntPtr hwnd)
     {
-        // Use 'unchecked' to safely cast the massive uint down to an int
         SetWindowLongW(hwnd, GWL_STYLE, unchecked((int)WS_POPUP));
-
-        // Add EX Styles (Don't steal focus, hide from Alt+Tab)
         int exStyle = GetWindowLongW(hwnd, GWL_EXSTYLE);
         SetWindowLongW(hwnd, GWL_EXSTYLE, exStyle | unchecked((int)(WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW)));
     }

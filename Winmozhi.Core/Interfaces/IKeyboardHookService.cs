@@ -9,11 +9,13 @@ public interface IKeyboardHookService
     bool IsPopupVisible { get; set; }
 
     event EventHandler<string> OnWordTyped;
-    event EventHandler OnInsertRequested;
 
-    // THIS IS THE NEW EVENT FOR THE ARROW KEYS
+    // THIS MUST HAVE <string>
+    event EventHandler<string> OnInsertRequested;
     event EventHandler<int> OnSelectionChangedRequested;
 
-    void ReplaceWord(int backspaceCount, string malayalamWord);
+    // THIS MUST HAVE THE THIRD ARGUMENT
+    void ReplaceWord(int backspaceCount, string malayalamWord, string trailingText = "");
+
     (double X, double Y) GetCaretPosition();
 }

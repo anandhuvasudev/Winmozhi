@@ -93,7 +93,7 @@ public partial class PopupViewModel : ObservableObject
         catch (TaskCanceledException) { }
     }
 
-    private void HookService_OnInsertRequested(object? sender, EventArgs e)
+    private void HookService_OnInsertRequested(object? sender, string e)
     {
         _dispatcher.TryEnqueue(() =>
         {
@@ -101,11 +101,11 @@ public partial class PopupViewModel : ObservableObject
             {
                 var selectedWord = Suggestions[SelectedIndex];
 
-                // ---- PHASE 5: THE LEARNING LOGIC ----
-                // Asynchronously save this preference to the SQLite database
+                // Save preference
                 _ = _historyDatabase.UpdateWordFrequencyAsync(CurrentManglish, selectedWord);
 
-                _hookService.ReplaceWord(CurrentManglish.Length, selectedWord);
+                // Inject Word + Trailing Space/Enter!
+                _hookService.ReplaceWord(CurrentManglish.Length, selectedWord, e);
 
                 Suggestions.Clear();
                 IsVisible = false;

@@ -1,14 +1,12 @@
-﻿using System.Runtime.InteropServices;
+﻿using System;
+using System.Runtime.InteropServices;
 
 namespace Winmozhi.Hooks.Native;
 
-// Must be partial for [LibraryImport] source generators in .NET 10
 internal static partial class NativeMethods
 {
     public const int WH_KEYBOARD_LL = 13;
     public const int WM_KEYDOWN = 0x0100;
-    public const int WM_KEYUP = 0x0101;
-    public const int WM_SYSKEYDOWN = 0x0104;
 
     public const uint INPUT_KEYBOARD = 1;
     public const uint KEYEVENTF_KEYUP = 0x0002;
@@ -26,6 +24,7 @@ internal static partial class NativeMethods
         public IntPtr dwExtraInfo;
     }
 
+    // THE FIX: The Struct is now perfectly sized for 64-bit OS SendInput
     [StructLayout(LayoutKind.Sequential)]
     public struct INPUT
     {
@@ -36,7 +35,20 @@ internal static partial class NativeMethods
     [StructLayout(LayoutKind.Explicit)]
     public struct InputUnion
     {
+        [FieldOffset(0)] public MOUSEINPUT mi;
         [FieldOffset(0)] public KEYBDINPUT ki;
+        [FieldOffset(0)] public HARDWAREINPUT hi;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct MOUSEINPUT
+    {
+        public int dx;
+        public int dy;
+        public uint mouseData;
+        public uint dwFlags;
+        public uint time;
+        public IntPtr dwExtraInfo;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -47,6 +59,14 @@ internal static partial class NativeMethods
         public uint dwFlags;
         public uint time;
         public IntPtr dwExtraInfo;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct HARDWAREINPUT
+    {
+        public uint uMsg;
+        public ushort wParamL;
+        public ushort wParamH;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -71,6 +91,8 @@ internal static partial class NativeMethods
         public int Right;
         public int Bottom;
     }
+
+    public struct InteropPoint { public int X; public int Y; }
 
     [LibraryImport("user32.dll", SetLastError = true)]
     public static partial IntPtr SetWindowsHookExW(int idHook, LowLevelKeyboardProc lpfn, IntPtr hMod, uint dwThreadId);
@@ -98,7 +120,4 @@ internal static partial class NativeMethods
     [LibraryImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool ClientToScreen(IntPtr hWnd, ref InteropPoint lpPoint);
-
-    [StructLayout(LayoutKind.Sequential)]
-    public struct InteropPoint { public int X; public int Y; }
 }

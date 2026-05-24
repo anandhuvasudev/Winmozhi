@@ -17,9 +17,7 @@ public class KeyboardHookService : IKeyboardHookService
     public bool IsPopupVisible { get; set; }
 
     public event EventHandler<string>? OnWordTyped;
-    public event EventHandler? OnInsertRequested;
-
-    // THIS MUST MATCH THE INTERFACE
+    public event EventHandler<string>? OnInsertRequested; // Updated to pass trailing text
     public event EventHandler<int>? OnSelectionChangedRequested;
 
     public KeyboardHookService()
@@ -50,17 +48,21 @@ public class KeyboardHookService : IKeyboardHookService
             var kbdStruct = Marshal.PtrToStructure<NativeMethods.KBDLLHOOKSTRUCT>(lParam);
             var key = kbdStruct.vkCode;
 
-            // IGNORE INJECTED/ROBOT KEYS (So our backspaces don't break the app)
+            // IGNORE INJECTED KEYS (Prevents infinite loops)
             if ((kbdStruct.flags & 0x10) != 0)
                 return NativeMethods.CallNextHookEx(_hookId, nCode, wParam, lParam);
 
+            // 1. If Popup is visible, intercept action keys!
             if (IsPopupVisible)
             {
-                if (key == 0x09) { OnInsertRequested?.Invoke(this, EventArgs.Empty); return (IntPtr)1; } // Tab
-                if (key == 0x28) { OnSelectionChangedRequested?.Invoke(this, 1); return (IntPtr)1; }     // Down Arrow
-                if (key == 0x26) { OnSelectionChangedRequested?.Invoke(this, -1); return (IntPtr)1; }    // Up Arrow
+                if (key == 0x09) { OnInsertRequested?.Invoke(this, ""); return (IntPtr)1; }   // Tab (Just inject word)
+                if (key == 0x20) { OnInsertRequested?.Invoke(this, " "); return (IntPtr)1; }  // Space (Inject word + Space)
+                if (key == 0x0D) { OnInsertRequested?.Invoke(this, "\n"); return (IntPtr)1; } // Enter (Inject word + Enter)
+                if (key == 0x28) { OnSelectionChangedRequested?.Invoke(this, 1); return (IntPtr)1; }  // Down Arrow
+                if (key == 0x26) { OnSelectionChangedRequested?.Invoke(this, -1); return (IntPtr)1; } // Up Arrow
             }
 
+            // 2. Build the word
             if (key is >= 0x41 and <= 0x5A)
             {
                 _currentWord.Append(char.ToLowerInvariant((char)key));
@@ -81,19 +83,33 @@ public class KeyboardHookService : IKeyboardHookService
         return NativeMethods.CallNextHookEx(_hookId, nCode, wParam, lParam);
     }
 
-    public void ReplaceWord(int backspaceCount, string malayalamWord)
+    public void ReplaceWord(int backspaceCount, string malayalamWord, string trailingText = "")
     {
         var inputs = new List<NativeMethods.INPUT>();
+
+        // 1. Delete the Manglish text
         for (int i = 0; i < backspaceCount; i++)
         {
             inputs.Add(CreateKeyInput(0x08, false));
             inputs.Add(CreateKeyInput(0x08, true));
         }
-        foreach (var c in malayalamWord)
+
+        // 2. Inject Malayalam + Space/Enter
+        string fullText = malayalamWord + trailingText;
+        foreach (var c in fullText)
         {
-            inputs.Add(CreateUnicodeInput(c, false));
-            inputs.Add(CreateUnicodeInput(c, true));
+            if (c == '\n')
+            {
+                inputs.Add(CreateKeyInput(0x0D, false)); // Real Enter Key
+                inputs.Add(CreateKeyInput(0x0D, true));
+            }
+            else
+            {
+                inputs.Add(CreateUnicodeInput(c, false));
+                inputs.Add(CreateUnicodeInput(c, true));
+            }
         }
+
         NativeMethods.SendInput((uint)inputs.Count, inputs.ToArray(), Marshal.SizeOf<NativeMethods.INPUT>());
 
         _currentWord.Clear();
