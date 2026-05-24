@@ -29,11 +29,13 @@ public class KeyboardHookService : IKeyboardHookService
         using var curProcess = Process.GetCurrentProcess();
         using var curModule = curProcess.MainModule;
 
-        // NativeLibrary.GetMainProgramHandle() is the .NET 10 preferred way to get the module handle
+        if (curModule == null) return;
+
+        // Use BaseAddress instead of NativeLibrary.GetMainProgramHandle() to avoid JIT crashes
         _hookId = NativeMethods.SetWindowsHookExW(
             NativeMethods.WH_KEYBOARD_LL,
             _proc,
-            NativeLibrary.GetMainProgramHandle(),
+            curModule.BaseAddress,
             0);
     }
 

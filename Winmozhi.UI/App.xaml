@@ -2,29 +2,13 @@
 <Application
     x:Class="Winmozhi.UI.App"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:tb="using:H.NotifyIcon">
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
     <Application.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
                 <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
             </ResourceDictionary.MergedDictionaries>
-
-            <!-- Global System Tray Icon -->
-            <tb:TaskbarIcon x:Key="TrayIcon"
-                            ToolTipText="Winmozhi Engine (Active)"
-                            IconSource="/Assets/StoreLogo.png">
-                <!-- System Tray Context Menu -->
-                <tb:TaskbarIcon.ContextFlyout>
-                    <MenuFlyout>
-                        <MenuFlyoutItem Text="Settings" Icon="Setting"/>
-                        <MenuFlyoutSeparator />
-                        <MenuFlyoutItem Text="Exit Winmozhi" />
-                    </MenuFlyout>
-                </tb:TaskbarIcon.ContextFlyout>
-            </tb:TaskbarIcon>
-
         </ResourceDictionary>
     </Application.Resources>
 </Application>

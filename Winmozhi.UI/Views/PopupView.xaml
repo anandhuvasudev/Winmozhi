@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="Winmozhi.UI.Views.PopupView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <Grid>
+        <Border Background="{ThemeResource ApplicationPageBackgroundThemeBrush}"
+                BorderBrush="{ThemeResource SystemControlForegroundBaseMediumLowBrush}"
+                BorderThickness="1"
+                CornerRadius="8"
+                Padding="8"
+                Margin="10"
+                HorizontalAlignment="Left"
+                VerticalAlignment="Top">
+
+            <StackPanel Spacing="4">
+                <TextBlock Text="{x:Bind ViewModel.CurrentManglish, Mode=OneWay}" 
+                           FontSize="12" 
+                           Foreground="Gray"
+                           Margin="4,0,0,4"/>
+
+                <ItemsControl ItemsSource="{x:Bind ViewModel.Suggestions, Mode=OneWay}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="x:String">
+                            <Border CornerRadius="4" Padding="8,4" Margin="0,2">
+                                <TextBlock Text="{x:Bind}" FontSize="16" FontWeight="SemiBold"/>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </Border>
+    </Grid>
+</Window>

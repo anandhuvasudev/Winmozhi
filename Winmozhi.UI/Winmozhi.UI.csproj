@@ -3,17 +3,25 @@
 		<OutputType>WinExe</OutputType>
 		<TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
 		<TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+		<SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
+
+		<!-- ADD THIS LINE TO ENABLE C# 13/14 PARTIAL PROPERTIES -->
+		<LangVersion>preview</LangVersion>
+
 		<RootNamespace>Winmozhi.UI</RootNamespace>
 		<Platforms>x64;ARM64</Platforms>
 		<RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
 		<UseWinUI>true</UseWinUI>
 		<EnableMsixTooling>true</EnableMsixTooling>
 		<NoWarn>NETSDK1206</NoWarn>
-
-		<!-- THESE TWO LINES PREVENT THE COM EXCEPTION -->
 		<WindowsPackageType>None</WindowsPackageType>
 		<WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+		<Nullable>enable</Nullable>
 	</PropertyGroup>
+	<ItemGroup>
+	  <None Remove="Views\PopupView.xaml" />
+	</ItemGroup>
 
 	<ItemGroup>
 		<PackageReference Include="Microsoft.WindowsAppSDK" Version="2.1.3" />
@@ -27,5 +35,11 @@
 	<ItemGroup>
 		<ProjectReference Include="..\Winmozhi.Core\Winmozhi.Core.csproj" />
 		<ProjectReference Include="..\Winmozhi.Hooks\Winmozhi.Hooks.csproj" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Page Update="Views\PopupView.xaml">
+	    <Generator>MSBuild:Compile</Generator>
+	  </Page>
 	</ItemGroup>
 </Project>
