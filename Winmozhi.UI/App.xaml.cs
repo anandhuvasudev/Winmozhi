@@ -30,7 +30,7 @@ public partial class App : Microsoft.UI.Xaml.Application
                     services.AddSingleton<IOfflineEngine, TrieOfflineEngine>();
                     services.AddSingleton<ITransliterationEngine, HybridTransliterationEngine>();
                     services.AddSingleton<IKeyboardHookService, Winmozhi.Hooks.KeyboardHookService>();
-                    services.AddSingleton<IHistoryDatabase, MockHistoryDatabase>();
+                    services.AddSingleton<IHistoryDatabase, Winmozhi.Core.Engines.SqliteHistoryDatabase>();
                     services.AddSingleton<Winmozhi.UI.ViewModels.PopupViewModel>();
                     services.AddSingleton<Winmozhi.UI.Views.PopupView>();
                 })

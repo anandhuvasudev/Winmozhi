@@ -12,6 +12,7 @@ public partial class PopupViewModel : ObservableObject
 {
     private readonly ITransliterationEngine _engine;
     private readonly IKeyboardHookService _hookService;
+    private readonly IHistoryDatabase _historyDatabase; // ADDED
     private readonly DispatcherQueue _dispatcher;
     private CancellationTokenSource? _cts;
 
@@ -21,16 +22,17 @@ public partial class PopupViewModel : ObservableObject
     [ObservableProperty]
     public partial bool IsVisible { get; set; }
 
-    // ADDED FOR ARROW KEY HIGHLIGHTING
     [ObservableProperty]
     public partial int SelectedIndex { get; set; }
 
     public ObservableCollection<string> Suggestions { get; } = [];
 
-    public PopupViewModel(ITransliterationEngine engine, IKeyboardHookService hookService)
+    // ADDED IHistoryDatabase to Constructor
+    public PopupViewModel(ITransliterationEngine engine, IKeyboardHookService hookService, IHistoryDatabase historyDatabase)
     {
         _engine = engine;
         _hookService = hookService;
+        _historyDatabase = historyDatabase;
         _dispatcher = DispatcherQueue.GetForCurrentThread();
         CurrentManglish = string.Empty;
 
@@ -46,8 +48,8 @@ public partial class PopupViewModel : ObservableObject
             if (Suggestions.Count == 0) return;
 
             int newIndex = SelectedIndex + direction;
-            if (newIndex < 0) newIndex = Suggestions.Count - 1; // Wrap around to bottom
-            if (newIndex >= Suggestions.Count) newIndex = 0;    // Wrap around to top
+            if (newIndex < 0) newIndex = Suggestions.Count - 1;
+            if (newIndex >= Suggestions.Count) newIndex = 0;
 
             SelectedIndex = newIndex;
         });
@@ -75,9 +77,7 @@ public partial class PopupViewModel : ObservableObject
 
         try
         {
-            // FIX LAG: Wait 150ms before asking Google. If user types another letter, this gets cancelled!
-            await Task.Delay(150, token);
-
+            await Task.Delay(150, token); // Debounce
             var results = await _engine.GetSuggestionsAsync(word, token);
 
             _dispatcher.TryEnqueue(() =>
@@ -85,12 +85,12 @@ public partial class PopupViewModel : ObservableObject
                 Suggestions.Clear();
                 foreach (var res in results) Suggestions.Add(res);
 
-                SelectedIndex = 0; // Reset highlight to the top word
+                SelectedIndex = 0;
                 IsVisible = Suggestions.Count > 0;
                 _hookService.IsPopupVisible = IsVisible;
             });
         }
-        catch (TaskCanceledException) { /* Debounced */ }
+        catch (TaskCanceledException) { }
     }
 
     private void HookService_OnInsertRequested(object? sender, EventArgs e)
@@ -101,7 +101,10 @@ public partial class PopupViewModel : ObservableObject
             {
                 var selectedWord = Suggestions[SelectedIndex];
 
-                // Inject the word!
+                // ---- PHASE 5: THE LEARNING LOGIC ----
+                // Asynchronously save this preference to the SQLite database
+                _ = _historyDatabase.UpdateWordFrequencyAsync(CurrentManglish, selectedWord);
+
                 _hookService.ReplaceWord(CurrentManglish.Length, selectedWord);
 
                 Suggestions.Clear();
