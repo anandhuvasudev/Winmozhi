@@ -76,4 +76,13 @@ public class SqliteHistoryDatabase : IHistoryDatabase
 
         return results;
     }
+    public async Task ClearHistoryAsync()
+    {
+        await InitializeAsync();
+        if (_database != null)
+        {
+            await _database.DeleteAllAsync<UserDictionaryEntry>();
+        }
+    }
+
 }

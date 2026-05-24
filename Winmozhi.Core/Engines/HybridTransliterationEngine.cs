@@ -9,37 +9,67 @@ public class HybridTransliterationEngine(
     IHistoryDatabase historyDatabase,
     ILogger<HybridTransliterationEngine> logger) : ITransliterationEngine
 {
-    public async Task<IEnumerable<string>> GetSuggestionsAsync(string manglishText, CancellationToken cancellationToken)
+    private const int MaxSuggestions = 5;
+
+    // 400 ms is enough for most network conditions while not blocking the UI.
+    // The caller's CancellationToken (debounce) is linked in, so a new keystroke
+    // also cancels this call automatically.
+    private const int OnlineTimeoutMs = 400;
+
+    /// <inheritdoc/>
+    public async Task<IEnumerable<string>> GetInstantSuggestionsAsync(
+        string manglishText, CancellationToken cancellationToken)
     {
-        var finalSuggestions = new List<string>();
+        if (string.IsNullOrWhiteSpace(manglishText)) return [];
 
+        // 1. History (User's prior choices)
+        var historyResults = await historyDatabase.GetUserSuggestionsAsync(manglishText).ConfigureAwait(false);
+
+        // 2. Offline Trie Engine (Exact dictionary matches)
         var offlineResults = offlineEngine.GetSuggestions(manglishText);
-        var historyResults = await historyDatabase.GetUserSuggestionsAsync(manglishText);
 
-        finalSuggestions.AddRange(historyResults);
-        finalSuggestions.AddRange(offlineResults);
+        // 3. Algorithmic Fallback Engine (Guesses words mathematically)
+        var algorithmicGuess = SimpleMozhiParser.Parse(manglishText);
+
+        // Combine them: History takes top priority, then exact dict, then the algorithm's guess
+        var combined = historyResults.Concat(offlineResults).ToList();
+
+        if (!string.IsNullOrEmpty(algorithmicGuess) && !combined.Contains(algorithmicGuess))
+        {
+            combined.Add(algorithmicGuess);
+        }
+
+        return combined.Distinct(StringComparer.OrdinalIgnoreCase).Take(MaxSuggestions);
+    }
+
+    /// <inheritdoc/>
+    public async Task<IEnumerable<string>> GetOnlineSuggestionsAsync(
+        string manglishText, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(manglishText)) return [];
 
         try
         {
-            // INCREASED TIMEOUT TO 1.5 SECONDS
             using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            timeoutCts.CancelAfter(TimeSpan.FromMilliseconds(1500));
+            timeoutCts.CancelAfter(TimeSpan.FromMilliseconds(OnlineTimeoutMs));
 
-            var onlineResults = await onlineEngine.FetchSuggestionsAsync(manglishText, timeoutCts.Token);
-            finalSuggestions.AddRange(onlineResults);
+            return await onlineEngine
+                .FetchSuggestionsAsync(manglishText, timeoutCts.Token)
+                .ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
-            logger.LogWarning("Online engine timed out or was cancelled for: {Text}", manglishText);
+            // A new keystroke cancelled us, or the network timed out. Both are expected.
+            logger.LogTrace("Online engine cancelled/timed out for: {Text}", manglishText);
+            return [];
         }
-
-        // FORCE THE UI TO SHOW UP EVEN IF OFFLINE AND GOOGLE FAILS
-        if (finalSuggestions.Count == 0)
+        catch (Exception ex)
         {
-            finalSuggestions.Add(manglishText);
-            finalSuggestions.Add("Google API Timeout");
+            if (logger.IsEnabled(Microsoft.Extensions.Logging.LogLevel.Warning))
+            {
+                logger.LogWarning(ex, "Unexpected error in online engine for: {Text}", manglishText);
+            }
+            return [];
         }
-
-        return finalSuggestions.Distinct().Take(5);
     }
 }

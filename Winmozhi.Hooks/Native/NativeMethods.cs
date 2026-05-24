@@ -25,10 +25,15 @@ internal static partial class NativeMethods
     }
 
     // THE FIX: The Struct is now perfectly sized for 64-bit OS SendInput
-    [StructLayout(LayoutKind.Sequential)]
+    // THE FIX: The Struct is now explicitly laid out to guarantee 40-byte size for 64-bit OS SendInput
+    [StructLayout(LayoutKind.Explicit)]
     public struct INPUT
     {
+        [FieldOffset(0)]
         public uint type;
+
+        // Forces the 64-bit 8-byte alignment perfectly.
+        [FieldOffset(8)]
         public InputUnion u;
     }
 

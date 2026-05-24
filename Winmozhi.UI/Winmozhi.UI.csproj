@@ -22,6 +22,7 @@
 	</PropertyGroup>
 	<ItemGroup>
 	  <None Remove="Views\PopupView.xaml" />
+	  <None Remove="Views\SettingsWindow.xaml" />
 	</ItemGroup>
 
 	<ItemGroup>
@@ -36,6 +37,12 @@
 	<ItemGroup>
 		<ProjectReference Include="..\Winmozhi.Core\Winmozhi.Core.csproj" />
 		<ProjectReference Include="..\Winmozhi.Hooks\Winmozhi.Hooks.csproj" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Page Update="Views\SettingsWindow.xaml">
+	    <Generator>MSBuild:Compile</Generator>
+	  </Page>
 	</ItemGroup>
 
 	<ItemGroup>

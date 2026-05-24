@@ -33,6 +33,8 @@ public partial class App : Microsoft.UI.Xaml.Application
                     services.AddSingleton<IHistoryDatabase, Winmozhi.Core.Engines.SqliteHistoryDatabase>();
                     services.AddSingleton<Winmozhi.UI.ViewModels.PopupViewModel>();
                     services.AddSingleton<Winmozhi.UI.Views.PopupView>();
+                    services.AddSingleton<Winmozhi.UI.ViewModels.SettingsViewModel>();
+                    services.AddSingleton<Winmozhi.UI.Views.SettingsWindow>();
                 })
                 .Build();
         }
@@ -50,20 +52,38 @@ public partial class App : Microsoft.UI.Xaml.Application
             {
                 await Host.StartAsync();
 
+                // ---> NEW: LOAD OFFLINE DICTIONARY INTO RAM <---
+                var offlineEngine = Host.Services.GetRequiredService<IOfflineEngine>();
+                offlineEngine.LoadDictionary(Winmozhi.Core.Engines.CommonWordsDictionary.GetStarterWords());
+
                 var hookService = Host.Services.GetRequiredService<IKeyboardHookService>();
                 hookService.StartHook();
 
+                // 1. Initialize the invisible Popup Window
                 _popupWindow = Host.Services.GetRequiredService<Winmozhi.UI.Views.PopupView>();
                 _popupWindow.Activate();
                 _popupWindow.AppWindow.Hide();
 
-                // ---> NEW: WARM UP THE ENGINE IN THE BACKGROUND <---
+                // 2. Initialize the Settings Window (Which mounts the System Tray icon)
+                var settingsWindow = Host.Services.GetRequiredService<Winmozhi.UI.Views.SettingsWindow>();
+                settingsWindow.Activate();
+                settingsWindow.AppWindow.Hide(); // Hide UI, but Tray Icon remains visible!
+
+                // 3. Warm up engines...
                 // This forces .NET to load HTTP, JSON, and Google API handlers into memory 
                 // so the user experiences zero lag when they actually start typing.
                 _ = System.Threading.Tasks.Task.Run(async () =>
                 {
-                    var engine = Host.Services.GetRequiredService<ITransliterationEngine>();
-                    await engine.GetSuggestionsAsync("a", System.Threading.CancellationToken.None);
+                    try
+                    {
+                        var engine = Host.Services.GetRequiredService<ITransliterationEngine>();
+                        await engine.GetInstantSuggestionsAsync("a", System.Threading.CancellationToken.None);
+                        await engine.GetOnlineSuggestionsAsync("a", System.Threading.CancellationToken.None);
+                    }
+                    catch
+                    {
+                        // Safely swallow warmup exceptions so it doesn't crash the startup flow
+                    }
                 });
             }
         }

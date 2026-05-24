@@ -12,18 +12,41 @@ public class KeyboardHookService : IKeyboardHookService
 {
     private IntPtr _hookId = IntPtr.Zero;
     private readonly NativeMethods.LowLevelKeyboardProc _proc;
-    private readonly StringBuilder _currentWord = new();
 
-    public bool IsPopupVisible { get; set; }
+    // ── Word Buffer ──────────────────────────────────────────────────────────────
+    // _currentWord is written by the hook thread (HookCallback) and cleared by the
+    // UI thread (ReplaceWord via TryEnqueue). _wordLock guards both accesses.
+    private readonly StringBuilder _currentWord = new();
+    private readonly object _wordLock = new();
+
+    // ── IsPopupVisible ────────────────────────────────────────────────────────────
+    // BUG FIX: This field MUST be volatile.
+    //
+    // The hook callback runs on a dedicated background thread (the hook thread).
+    // IsPopupVisible is written by the UI thread (inside TryEnqueue callbacks).
+    // Without volatile, the CPU may cache the value per-thread, so the hook thread
+    // could read a stale `false` even after the UI thread has set it to `true`.
+    // That makes Tab/Enter fall through as if the popup wasn't showing.
+    private volatile bool _isPopupVisible;
+
+    public bool IsPopupVisible
+    {
+        get => _isPopupVisible;
+        set => _isPopupVisible = value;
+    }
 
     public event EventHandler<string>? OnWordTyped;
-    public event EventHandler<string>? OnInsertRequested; // Updated to pass trailing text
+    public event EventHandler<string>? OnInsertRequested;
     public event EventHandler<int>? OnSelectionChangedRequested;
 
     public KeyboardHookService()
     {
+        // Keep a strong reference to the delegate; GC must never collect it while
+        // the hook is installed or Windows will call a dangling function pointer.
         _proc = HookCallback;
     }
+
+    // ── Hook Lifecycle ────────────────────────────────────────────────────────────
 
     public void StartHook()
     {
@@ -31,7 +54,8 @@ public class KeyboardHookService : IKeyboardHookService
         using var curProcess = Process.GetCurrentProcess();
         using var curModule = curProcess.MainModule;
         if (curModule == null) return;
-        _hookId = NativeMethods.SetWindowsHookExW(NativeMethods.WH_KEYBOARD_LL, _proc, curModule.BaseAddress, 0);
+        _hookId = NativeMethods.SetWindowsHookExW(
+            NativeMethods.WH_KEYBOARD_LL, _proc, curModule.BaseAddress, 0);
     }
 
     public void StopHook()
@@ -41,6 +65,8 @@ public class KeyboardHookService : IKeyboardHookService
         _hookId = IntPtr.Zero;
     }
 
+    // ── Hook Callback (runs on dedicated hook thread) ─────────────────────────────
+
     private IntPtr HookCallback(int nCode, IntPtr wParam, IntPtr lParam)
     {
         if (nCode >= 0 && wParam == (IntPtr)NativeMethods.WM_KEYDOWN)
@@ -48,92 +74,182 @@ public class KeyboardHookService : IKeyboardHookService
             var kbdStruct = Marshal.PtrToStructure<NativeMethods.KBDLLHOOKSTRUCT>(lParam);
             var key = kbdStruct.vkCode;
 
-            // IGNORE INJECTED KEYS (Prevents infinite loops)
+            // Skip injected keys (LLKHF_INJECTED = 0x10). SendInput sets this flag
+            // automatically, preventing an infinite loop when ReplaceWord fires.
             if ((kbdStruct.flags & 0x10) != 0)
                 return NativeMethods.CallNextHookEx(_hookId, nCode, wParam, lParam);
 
-            // 1. If Popup is visible, intercept action keys!
-            if (IsPopupVisible)
+            // ── Popup action keys ─────────────────────────────────────────────────
+            // Reading _isPopupVisible here is safe without a lock because the field
+            // is volatile — the CPU always fetches the latest value from main memory.
+            if (_isPopupVisible)
             {
-                if (key == 0x09) { OnInsertRequested?.Invoke(this, ""); return (IntPtr)1; }   // Tab (Just inject word)
-                if (key == 0x20) { OnInsertRequested?.Invoke(this, " "); return (IntPtr)1; }  // Space (Inject word + Space)
-                if (key == 0x0D) { OnInsertRequested?.Invoke(this, "\n"); return (IntPtr)1; } // Enter (Inject word + Enter)
-                if (key == 0x28) { OnSelectionChangedRequested?.Invoke(this, 1); return (IntPtr)1; }  // Down Arrow
-                if (key == 0x26) { OnSelectionChangedRequested?.Invoke(this, -1); return (IntPtr)1; } // Up Arrow
+                switch (key)
+                {
+                    case 0x09: // Tab   — accept top suggestion (no trailing character)
+                        OnInsertRequested?.Invoke(this, "");
+                        return (IntPtr)1;  // Consume key; don't forward to the app
+
+                    case 0x20: // Space — accept + insert space
+                        OnInsertRequested?.Invoke(this, " ");
+                        return (IntPtr)1;
+
+                    case 0x0D: // Enter — accept + insert newline
+                        OnInsertRequested?.Invoke(this, "\n");
+                        return (IntPtr)1;
+
+                    case 0x28: // Down Arrow — next suggestion
+                        OnSelectionChangedRequested?.Invoke(this, 1);
+                        return (IntPtr)1;
+
+                    case 0x26: // Up Arrow — previous suggestion
+                        OnSelectionChangedRequested?.Invoke(this, -1);
+                        return (IntPtr)1;
+                }
             }
 
-            // 2. Build the word
-            if (key is >= 0x41 and <= 0x5A)
+            // ── Word buffer management ────────────────────────────────────────────
+            string? wordSnapshot = null;
+
+            lock (_wordLock)
             {
-                _currentWord.Append(char.ToLowerInvariant((char)key));
-                OnWordTyped?.Invoke(this, _currentWord.ToString());
+                if (key is >= 0x41 and <= 0x5A)  // A–Z (virtual key codes are uppercase)
+                {
+                    _currentWord.Append(char.ToLowerInvariant((char)key));
+                    wordSnapshot = _currentWord.ToString();
+                }
+                else if (key == 0x08 && _currentWord.Length > 0)  // Backspace
+                {
+                    _currentWord.Length--;
+                    wordSnapshot = _currentWord.ToString();
+                }
+                else if (key is 0x20 or 0x0D || key is >= 0xBA and <= 0xE2)
+                {
+                    // Space, Enter, or punctuation/symbol: end of word, dismiss popup
+                    _currentWord.Clear();
+                    _isPopupVisible = false;
+                    wordSnapshot = string.Empty;
+                }
+                // All other keys (Ctrl, Alt, Tab when popup hidden, etc.) are ignored.
+                // Crucially, Tab (0x09) is NOT cleared here — it is only handled above
+                // when the popup is visible.
             }
-            else if (key == 0x08 && _currentWord.Length > 0)
-            {
-                _currentWord.Length--;
-                OnWordTyped?.Invoke(this, _currentWord.ToString());
-            }
-            else if (key is 0x20 or 0x0D || (key is >= 0xBA and <= 0xE2))
-            {
-                _currentWord.Clear();
-                OnWordTyped?.Invoke(this, string.Empty);
-                IsPopupVisible = false;
-            }
+
+            if (wordSnapshot is not null)
+                OnWordTyped?.Invoke(this, wordSnapshot);
         }
+
         return NativeMethods.CallNextHookEx(_hookId, nCode, wParam, lParam);
     }
 
+    // ── Text Replacement (called from UI thread via TryEnqueue) ───────────────────
+
     public void ReplaceWord(int backspaceCount, string malayalamWord, string trailingText = "")
     {
-        var inputs = new List<NativeMethods.INPUT>();
+        // Pre-allocate to avoid resizing: 2 inputs per char (keydown + keyup)
+        var inputs = new List<NativeMethods.INPUT>(
+            (backspaceCount + malayalamWord.Length + trailingText.Length) * 2);
 
-        // 1. Delete the Manglish text
+        // Step 1 — Erase the typed Manglish text with Backspace key events
         for (int i = 0; i < backspaceCount; i++)
         {
-            inputs.Add(CreateKeyInput(0x08, false));
-            inputs.Add(CreateKeyInput(0x08, true));
+            inputs.Add(CreateKeyInput(0x08, false)); // VK_BACK down
+            inputs.Add(CreateKeyInput(0x08, true));  // VK_BACK up
         }
 
-        // 2. Inject Malayalam + Space/Enter
+        // Step 2 — Inject the Malayalam word + optional trailing character
         string fullText = malayalamWord + trailingText;
-        foreach (var c in fullText)
+        foreach (char c in fullText)
         {
             if (c == '\n')
             {
-                inputs.Add(CreateKeyInput(0x0D, false)); // Real Enter Key
+                // Send a real Enter virtual key so apps recognise it as line-break
+                inputs.Add(CreateKeyInput(0x0D, false));
                 inputs.Add(CreateKeyInput(0x0D, true));
             }
             else
             {
+                // KEYEVENTF_UNICODE injects the UTF-16 code unit directly.
+                // Works for all Malayalam characters (U+0D00–U+0D7F, all in BMP).
                 inputs.Add(CreateUnicodeInput(c, false));
                 inputs.Add(CreateUnicodeInput(c, true));
             }
         }
 
-        NativeMethods.SendInput((uint)inputs.Count, inputs.ToArray(), Marshal.SizeOf<NativeMethods.INPUT>());
+        NativeMethods.SendInput(
+            (uint)inputs.Count,
+            inputs.ToArray(),
+            Marshal.SizeOf<NativeMethods.INPUT>());
 
-        _currentWord.Clear();
-        IsPopupVisible = false;
+        // Step 3 — Reset hook state so the next word starts clean
+        lock (_wordLock)
+        {
+            _currentWord.Clear();
+        }
+        _isPopupVisible = false;
         OnWordTyped?.Invoke(this, string.Empty);
     }
 
-    private static NativeMethods.INPUT CreateKeyInput(ushort vk, bool isKeyUp) => new() { type = NativeMethods.INPUT_KEYBOARD, u = new() { ki = new() { wVk = vk, wScan = 0, dwFlags = isKeyUp ? NativeMethods.KEYEVENTF_KEYUP : 0, dwExtraInfo = IntPtr.Zero } } };
-    private static NativeMethods.INPUT CreateUnicodeInput(char c, bool isKeyUp) => new() { type = NativeMethods.INPUT_KEYBOARD, u = new() { ki = new() { wVk = 0, wScan = c, dwFlags = NativeMethods.KEYEVENTF_UNICODE | (isKeyUp ? NativeMethods.KEYEVENTF_KEYUP : 0), dwExtraInfo = IntPtr.Zero } } };
+    // ── Caret Position ────────────────────────────────────────────────────────────
 
     public (double X, double Y) GetCaretPosition()
     {
         var hwnd = NativeMethods.GetForegroundWindow();
-        if (hwnd != IntPtr.Zero)
+        if (hwnd == IntPtr.Zero) return (-1, -1);
+
+        var threadId = NativeMethods.GetWindowThreadProcessId(hwnd, out _);
+        var guiInfo = new NativeMethods.GUITHREADINFO
         {
-            var threadId = NativeMethods.GetWindowThreadProcessId(hwnd, out _);
-            var guiInfo = new NativeMethods.GUITHREADINFO { cbSize = Marshal.SizeOf<NativeMethods.GUITHREADINFO>() };
-            if (NativeMethods.GetGUIThreadInfo(threadId, ref guiInfo) && guiInfo.hwndCaret != IntPtr.Zero)
+            cbSize = Marshal.SizeOf<NativeMethods.GUITHREADINFO>()
+        };
+
+        if (NativeMethods.GetGUIThreadInfo(threadId, ref guiInfo)
+            && guiInfo.hwndCaret != IntPtr.Zero)
+        {
+            var point = new NativeMethods.InteropPoint
             {
-                var point = new NativeMethods.InteropPoint { X = guiInfo.rcCaret.Left, Y = guiInfo.rcCaret.Bottom };
-                NativeMethods.ClientToScreen(guiInfo.hwndCaret, ref point);
-                return (point.X, point.Y);
-            }
+                X = guiInfo.rcCaret.Left,
+                Y = guiInfo.rcCaret.Bottom
+            };
+            NativeMethods.ClientToScreen(guiInfo.hwndCaret, ref point);
+            return (point.X, point.Y);
         }
+
         return (-1, -1);
     }
+
+    // ── SendInput Helpers ─────────────────────────────────────────────────────────
+
+    private static NativeMethods.INPUT CreateKeyInput(ushort vk, bool isKeyUp) =>
+        new()
+        {
+            type = NativeMethods.INPUT_KEYBOARD,
+            u = new NativeMethods.InputUnion
+            {
+                ki = new NativeMethods.KEYBDINPUT
+                {
+                    wVk = vk,
+                    wScan = 0,
+                    dwFlags = isKeyUp ? NativeMethods.KEYEVENTF_KEYUP : 0,
+                    dwExtraInfo = IntPtr.Zero
+                }
+            }
+        };
+
+    private static NativeMethods.INPUT CreateUnicodeInput(char c, bool isKeyUp) =>
+        new()
+        {
+            type = NativeMethods.INPUT_KEYBOARD,
+            u = new NativeMethods.InputUnion
+            {
+                ki = new NativeMethods.KEYBDINPUT
+                {
+                    wVk = 0,
+                    wScan = c,
+                    dwFlags = NativeMethods.KEYEVENTF_UNICODE
+                             | (isKeyUp ? NativeMethods.KEYEVENTF_KEYUP : 0),
+                    dwExtraInfo = IntPtr.Zero
+                }
+            }
+        };
 }
