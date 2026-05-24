@@ -1,9 +1,10 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Media;
 using System.Threading.Tasks;
 using Winmozhi.Core.Interfaces;
-using Winmozhi.Core.Utilities; // This using statement fixes the CS0103 error
+using Winmozhi.Core.Utilities;
 
 namespace Winmozhi.UI.ViewModels;
 
@@ -33,10 +34,23 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty]
     public partial double PopupOpacity { get; set; }
 
-    public string PopupOpacityPercentage
+    // ── Color Picker Conversions ──────────────────────────────────────────────────
+
+    public Windows.UI.Color PopupBackgroundColorColor
     {
-        get => $"{(PopupOpacity * 100):F0}% opacity";
+        get => HexToColor(PopupBackgroundColor, Windows.UI.Color.FromArgb(255, 26, 26, 26));
+        set => PopupBackgroundColor = ColorToHex(value);
     }
+    public SolidColorBrush PopupBackgroundColorBrush => new(PopupBackgroundColorColor);
+
+    public Windows.UI.Color PopupTextColorColor
+    {
+        get => HexToColor(PopupTextColor, Windows.UI.Color.FromArgb(255, 255, 255, 255));
+        set => PopupTextColor = ColorToHex(value);
+    }
+    public SolidColorBrush PopupTextColorBrush => new(PopupTextColorColor);
+
+    public string PopupOpacityPercentage => $"{(PopupOpacity * 100):F0}% opacity";
 
     public SettingsViewModel(IKeyboardHookService hookService, IHistoryDatabase historyDatabase)
     {
@@ -58,7 +72,6 @@ public partial class SettingsViewModel : ObservableObject
     {
         LocalPreferences.IsHookEnabled = value;
         LocalPreferences.Save();
-
         if (value) _hookService.StartHook();
         else _hookService.StopHook();
     }
@@ -73,12 +86,16 @@ public partial class SettingsViewModel : ObservableObject
     {
         LocalPreferences.PopupBackgroundColor = value;
         LocalPreferences.Save();
+        OnPropertyChanged(nameof(PopupBackgroundColorColor));
+        OnPropertyChanged(nameof(PopupBackgroundColorBrush));
     }
 
     partial void OnPopupTextColorChanged(string value)
     {
         LocalPreferences.PopupTextColor = value;
         LocalPreferences.Save();
+        OnPropertyChanged(nameof(PopupTextColorColor));
+        OnPropertyChanged(nameof(PopupTextColorBrush));
     }
 
     partial void OnPopupFontSizeChanged(int value)
@@ -108,5 +125,29 @@ public partial class SettingsViewModel : ObservableObject
     {
         _hookService.StopHook();
         Application.Current.Exit();
+    }
+
+    // ── Hex Parsers ───────────────────────────────────────────────────────────────
+    private static Windows.UI.Color HexToColor(string hex, Windows.UI.Color fallback)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(hex)) return fallback;
+            hex = hex.TrimStart('#');
+            if (hex.Length == 6)
+            {
+                return Windows.UI.Color.FromArgb(255,
+                    byte.Parse(hex[..2], System.Globalization.NumberStyles.HexNumber),
+                    byte.Parse(hex[2..4], System.Globalization.NumberStyles.HexNumber),
+                    byte.Parse(hex[4..6], System.Globalization.NumberStyles.HexNumber));
+            }
+        }
+        catch { }
+        return fallback;
+    }
+
+    private static string ColorToHex(Windows.UI.Color color)
+    {
+        return $"#{color.R:X2}{color.G:X2}{color.B:X2}";
     }
 }

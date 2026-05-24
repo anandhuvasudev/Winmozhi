@@ -12,22 +12,14 @@ namespace Winmozhi.Hooks;
 public class KeyboardHookService : IKeyboardHookService
 {
     private IntPtr _hookId = IntPtr.Zero;
-    private readonly NativeMethods.LowLevelKeyboardProc _proc;
+    private IntPtr _mouseHookId = IntPtr.Zero;
 
-    // ── Word Buffer ──────────────────────────────────────────────────────────────
-    // _currentWord is written by the hook thread (HookCallback) and cleared by the
-    // UI thread (ReplaceWord via TryEnqueue). _wordLock guards both accesses.
+    private readonly NativeMethods.LowLevelKeyboardProc _proc;
+    private readonly NativeMethods.LowLevelMouseProc _mouseProc;
+
     private readonly StringBuilder _currentWord = new();
     private readonly Lock _wordLock = new();
 
-    // ── IsPopupVisible ────────────────────────────────────────────────────────────
-    // BUG FIX: This field MUST be volatile.
-    //
-    // The hook callback runs on a dedicated background thread (the hook thread).
-    // IsPopupVisible is written by the UI thread (inside TryEnqueue callbacks).
-    // Without volatile, the CPU may cache the value per-thread, so the hook thread
-    // could read a stale `false` even after the UI thread has set it to `true`.
-    // That makes Tab/Enter fall through as if the popup wasn't showing.
     private volatile bool _isPopupVisible;
 
     public bool IsPopupVisible
@@ -42,12 +34,9 @@ public class KeyboardHookService : IKeyboardHookService
 
     public KeyboardHookService()
     {
-        // Keep a strong reference to the delegate; GC must never collect it while
-        // the hook is installed or Windows will call a dangling function pointer.
         _proc = HookCallback;
+        _mouseProc = MouseHookCallback; // Bind mouse hook delegate
     }
-
-    // ── Hook Lifecycle ────────────────────────────────────────────────────────────
 
     public void StartHook()
     {
@@ -55,19 +44,52 @@ public class KeyboardHookService : IKeyboardHookService
         using var curProcess = Process.GetCurrentProcess();
         using var curModule = curProcess.MainModule;
         if (curModule == null) return;
-        _hookId = NativeMethods.SetWindowsHookExW(
-            NativeMethods.WH_KEYBOARD_LL, _proc, curModule.BaseAddress, 0);
+
+        // Start both Keyboard and Mouse hooks
+        _hookId = NativeMethods.SetWindowsHookExW(NativeMethods.WH_KEYBOARD_LL, _proc, curModule.BaseAddress, 0);
+        _mouseHookId = NativeMethods.SetWindowsHookExW(NativeMethods.WH_MOUSE_LL, _mouseProc, curModule.BaseAddress, 0);
     }
 
     public void StopHook()
     {
-        if (_hookId == IntPtr.Zero) return;
-        NativeMethods.UnhookWindowsHookEx(_hookId);
-        _hookId = IntPtr.Zero;
+        if (_hookId != IntPtr.Zero)
+        {
+            NativeMethods.UnhookWindowsHookEx(_hookId);
+            _hookId = IntPtr.Zero;
+        }
+        if (_mouseHookId != IntPtr.Zero)
+        {
+            NativeMethods.UnhookWindowsHookEx(_mouseHookId);
+            _mouseHookId = IntPtr.Zero;
+        }
     }
 
-    // ── Hook Callback (runs on dedicated hook thread) ─────────────────────────────
+    // ── Mouse Click Hook ──────────────────────────────────────────────────────────
+    private IntPtr MouseHookCallback(int nCode, IntPtr wParam, IntPtr lParam)
+    {
+        // If the user clicks Left, Right, or Middle mouse button anywhere on screen
+        if (nCode >= 0 && (wParam == (IntPtr)NativeMethods.WM_LBUTTONDOWN ||
+                           wParam == (IntPtr)NativeMethods.WM_RBUTTONDOWN ||
+                           wParam == (IntPtr)NativeMethods.WM_MBUTTONDOWN))
+        {
+            string? wordSnapshot = null;
+            using (_wordLock.EnterScope())
+            {
+                if (_currentWord.Length > 0 || _isPopupVisible)
+                {
+                    _currentWord.Clear();
+                    _isPopupVisible = false;
+                    wordSnapshot = string.Empty;
+                }
+            }
+            if (wordSnapshot is not null)
+                OnWordTyped?.Invoke(this, wordSnapshot);
+        }
 
+        return NativeMethods.CallNextHookEx(_mouseHookId, nCode, wParam, lParam);
+    }
+
+    // ── Keyboard Hook ─────────────────────────────────────────────────────────────
     private IntPtr HookCallback(int nCode, IntPtr wParam, IntPtr lParam)
     {
         if (nCode >= 0 && wParam == (IntPtr)NativeMethods.WM_KEYDOWN)
@@ -75,65 +97,51 @@ public class KeyboardHookService : IKeyboardHookService
             var kbdStruct = Marshal.PtrToStructure<NativeMethods.KBDLLHOOKSTRUCT>(lParam);
             var key = kbdStruct.vkCode;
 
-            // Skip injected keys (LLKHF_INJECTED = 0x10). SendInput sets this flag
-            // automatically, preventing an infinite loop when ReplaceWord fires.
             if ((kbdStruct.flags & 0x10) != 0)
                 return NativeMethods.CallNextHookEx(_hookId, nCode, wParam, lParam);
 
-            // ── Popup action keys ─────────────────────────────────────────────────
-            // Reading _isPopupVisible here is safe without a lock because the field
-            // is volatile — the CPU always fetches the latest value from main memory.
             if (_isPopupVisible)
             {
                 switch (key)
                 {
-                    case 0x09: // Tab   — accept top suggestion (no trailing character)
-                        OnInsertRequested?.Invoke(this, "");
-                        return (IntPtr)1;  // Consume key; don't forward to the app
-
-                    case 0x20: // Space — accept + insert space
-                        OnInsertRequested?.Invoke(this, " ");
-                        return (IntPtr)1;
-
-                    case 0x0D: // Enter — accept + insert newline
-                        OnInsertRequested?.Invoke(this, "\n");
-                        return (IntPtr)1;
-
-                    case 0x28: // Down Arrow — next suggestion
-                        OnSelectionChangedRequested?.Invoke(this, 1);
-                        return (IntPtr)1;
-
-                    case 0x26: // Up Arrow — previous suggestion
-                        OnSelectionChangedRequested?.Invoke(this, -1);
-                        return (IntPtr)1;
+                    case 0x09: OnInsertRequested?.Invoke(this, ""); return (IntPtr)1;
+                    case 0x20: OnInsertRequested?.Invoke(this, " "); return (IntPtr)1;
+                    case 0x0D: OnInsertRequested?.Invoke(this, "\n"); return (IntPtr)1;
+                    case 0x28: OnSelectionChangedRequested?.Invoke(this, 1); return (IntPtr)1;
+                    case 0x26: OnSelectionChangedRequested?.Invoke(this, -1); return (IntPtr)1;
                 }
             }
 
-            // ── Word buffer management ────────────────────────────────────────────
             string? wordSnapshot = null;
-
             using (_wordLock.EnterScope())
             {
-                if (key is >= 0x41 and <= 0x5A)  // A–Z (virtual key codes are uppercase)
+                if (key is >= 0x41 and <= 0x5A)
                 {
                     _currentWord.Append(char.ToLowerInvariant((char)key));
                     wordSnapshot = _currentWord.ToString();
                 }
-                else if (key == 0x08 && _currentWord.Length > 0)  // Backspace
+                else if (key == 0x08 && _currentWord.Length > 0)
                 {
                     _currentWord.Length--;
                     wordSnapshot = _currentWord.ToString();
                 }
                 else if (key is 0x20 or 0x0D || key is >= 0xBA and <= 0xE2)
                 {
-                    // Space, Enter, or punctuation/symbol: end of word, dismiss popup
                     _currentWord.Clear();
                     _isPopupVisible = false;
                     wordSnapshot = string.Empty;
                 }
-                // All other keys (Ctrl, Alt, Tab when popup hidden, etc.) are ignored.
-                // Crucially, Tab (0x09) is NOT cleared here — it is only handled above
-                // when the popup is visible.
+                // Cancel popup and reset buffer if they press ESC, Tab (when popup is hidden), 
+                // Arrow keys, Alt, Ctrl, or Windows key.
+                else if (key == 0x1B || key == 0x09 || key is >= 0x21 and <= 0x28 || key == 0x11 || key == 0x12 || key is 0x5B or 0x5C)
+                {
+                    if (_currentWord.Length > 0 || _isPopupVisible)
+                    {
+                        _currentWord.Clear();
+                        _isPopupVisible = false;
+                        wordSnapshot = string.Empty;
+                    }
+                }
             }
 
             if (wordSnapshot is not null)
@@ -143,30 +151,17 @@ public class KeyboardHookService : IKeyboardHookService
         return NativeMethods.CallNextHookEx(_hookId, nCode, wParam, lParam);
     }
 
-    // ── Text Replacement (called from UI thread via TryEnqueue) ───────────────────
-
-    // ── Text Replacement (called from UI thread via TryEnqueue) ───────────────────
-
     public void ReplaceWord(int backspaceCount, string malayalamWord, string trailingText = "")
     {
-        var inputs = new List<NativeMethods.INPUT>();
-
-        // STEP 1: Delete the Manglish word by sending backspace commands with spacing
-        // Add a small delay in the input sequence to ensure each backspace is processed
+        var inputs = new List<NativeMethods.INPUT>(backspaceCount * 2 + 50);
         for (int i = 0; i < backspaceCount; i++)
         {
-            inputs.Add(CreateKeyInput(0x08, false)); // VK_BACK = 0x08 (Key Down)
-            inputs.Add(CreateKeyInput(0x08, true));  // VK_BACK (Key Up)
+            inputs.Add(CreateKeyInput(0x08, false));
+            inputs.Add(CreateKeyInput(0x08, true));
         }
 
-        // Add a system pause - create several empty inputs to space out the backspaces
-        // This gives the target application time to process each backspace
-        for (int i = 0; i < 5; i++)
-        {
-            inputs.Add(CreateKeyInput(0, false)); // Empty key input as spacing
-        }
+        for (int i = 0; i < 5; i++) inputs.Add(CreateKeyInput(0, false));
 
-        // STEP 2: Inject the Malayalam Unicode text (Replaces the deleted Manglish)
         string fullText = malayalamWord + trailingText;
         foreach (char c in fullText)
         {
@@ -182,22 +177,12 @@ public class KeyboardHookService : IKeyboardHookService
             }
         }
 
-        // Send all commands to Windows simultaneously
-        NativeMethods.SendInput(
-            (uint)inputs.Count,
-            inputs.ToArray(),
-            Marshal.SizeOf<NativeMethods.INPUT>());
+        NativeMethods.SendInput((uint)inputs.Count, inputs.ToArray(), Marshal.SizeOf<NativeMethods.INPUT>());
 
-        // Step 3: Reset hook state cleanly
-        using (_wordLock.EnterScope())
-        {
-            _currentWord.Clear();
-        }
+        using (_wordLock.EnterScope()) { _currentWord.Clear(); }
         _isPopupVisible = false;
         OnWordTyped?.Invoke(this, string.Empty);
     }
-
-    // ── Caret Position ────────────────────────────────────────────────────────────
 
     public (double X, double Y) GetCaretPosition()
     {
@@ -205,58 +190,20 @@ public class KeyboardHookService : IKeyboardHookService
         if (hwnd == IntPtr.Zero) return (-1, -1);
 
         var threadId = NativeMethods.GetWindowThreadProcessId(hwnd, out _);
-        var guiInfo = new NativeMethods.GUITHREADINFO
-        {
-            cbSize = Marshal.SizeOf<NativeMethods.GUITHREADINFO>()
-        };
+        var guiInfo = new NativeMethods.GUITHREADINFO { cbSize = Marshal.SizeOf<NativeMethods.GUITHREADINFO>() };
 
-        if (NativeMethods.GetGUIThreadInfo(threadId, ref guiInfo)
-            && guiInfo.hwndCaret != IntPtr.Zero)
+        if (NativeMethods.GetGUIThreadInfo(threadId, ref guiInfo) && guiInfo.hwndCaret != IntPtr.Zero)
         {
-            var point = new NativeMethods.InteropPoint
-            {
-                X = guiInfo.rcCaret.Left,
-                Y = guiInfo.rcCaret.Bottom
-            };
+            var point = new NativeMethods.InteropPoint { X = guiInfo.rcCaret.Left, Y = guiInfo.rcCaret.Bottom };
             NativeMethods.ClientToScreen(guiInfo.hwndCaret, ref point);
             return (point.X, point.Y);
         }
-
         return (-1, -1);
     }
 
-    // ── SendInput Helpers ─────────────────────────────────────────────────────────
-
     private static NativeMethods.INPUT CreateKeyInput(ushort vk, bool isKeyUp) =>
-        new()
-        {
-            type = NativeMethods.INPUT_KEYBOARD,
-            u = new NativeMethods.InputUnion
-            {
-                ki = new NativeMethods.KEYBDINPUT
-                {
-                    wVk = vk,
-                    wScan = 0,
-                    dwFlags = isKeyUp ? NativeMethods.KEYEVENTF_KEYUP : 0,
-                    dwExtraInfo = IntPtr.Zero
-                }
-            }
-        };
+        new() { type = NativeMethods.INPUT_KEYBOARD, u = new NativeMethods.InputUnion { ki = new NativeMethods.KEYBDINPUT { wVk = vk, dwFlags = isKeyUp ? NativeMethods.KEYEVENTF_KEYUP : 0 } } };
 
     private static NativeMethods.INPUT CreateUnicodeInput(char c, bool isKeyUp) =>
-        new()
-        {
-            type = NativeMethods.INPUT_KEYBOARD,
-            u = new NativeMethods.InputUnion
-            {
-                ki = new NativeMethods.KEYBDINPUT
-                {
-                    wVk = 0,
-                    wScan = c,
-                    dwFlags = NativeMethods.KEYEVENTF_UNICODE
-                             | (isKeyUp ? NativeMethods.KEYEVENTF_KEYUP : 0),
-                    dwExtraInfo = IntPtr.Zero
-                }
-            }
-        };
+        new() { type = NativeMethods.INPUT_KEYBOARD, u = new NativeMethods.InputUnion { ki = new NativeMethods.KEYBDINPUT { wScan = c, dwFlags = NativeMethods.KEYEVENTF_UNICODE | (isKeyUp ? NativeMethods.KEYEVENTF_KEYUP : 0) } } };
 }

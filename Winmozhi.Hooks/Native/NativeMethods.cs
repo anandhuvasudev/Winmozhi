@@ -8,11 +8,20 @@ internal static partial class NativeMethods
     public const int WH_KEYBOARD_LL = 13;
     public const int WM_KEYDOWN = 0x0100;
 
+    // --- Added Mouse Hook Constants ---
+    public const int WH_MOUSE_LL = 14;
+    public const int WM_LBUTTONDOWN = 0x0201;
+    public const int WM_RBUTTONDOWN = 0x0204;
+    public const int WM_MBUTTONDOWN = 0x0207;
+
     public const uint INPUT_KEYBOARD = 1;
     public const uint KEYEVENTF_KEYUP = 0x0002;
     public const uint KEYEVENTF_UNICODE = 0x0004;
 
     public delegate IntPtr LowLevelKeyboardProc(int nCode, IntPtr wParam, IntPtr lParam);
+
+    // --- Added Mouse Hook Delegate ---
+    public delegate IntPtr LowLevelMouseProc(int nCode, IntPtr wParam, IntPtr lParam);
 
     [StructLayout(LayoutKind.Sequential)]
     public struct KBDLLHOOKSTRUCT
@@ -24,17 +33,11 @@ internal static partial class NativeMethods
         public IntPtr dwExtraInfo;
     }
 
-    // THE FIX: The Struct is now perfectly sized for 64-bit OS SendInput
-    // THE FIX: The Struct is now explicitly laid out to guarantee 40-byte size for 64-bit OS SendInput
     [StructLayout(LayoutKind.Explicit)]
     public struct INPUT
     {
-        [FieldOffset(0)]
-        public uint type;
-
-        // Forces the 64-bit 8-byte alignment perfectly.
-        [FieldOffset(8)]
-        public InputUnion u;
+        [FieldOffset(0)] public uint type;
+        [FieldOffset(8)] public InputUnion u;
     }
 
     [StructLayout(LayoutKind.Explicit)]
@@ -101,6 +104,10 @@ internal static partial class NativeMethods
 
     [LibraryImport("user32.dll", SetLastError = true)]
     public static partial IntPtr SetWindowsHookExW(int idHook, LowLevelKeyboardProc lpfn, IntPtr hMod, uint dwThreadId);
+
+    // --- Added SetWindowsHookExW overload for Mouse ---
+    [LibraryImport("user32.dll", SetLastError = true)]
+    public static partial IntPtr SetWindowsHookExW(int idHook, LowLevelMouseProc lpfn, IntPtr hMod, uint dwThreadId);
 
     [LibraryImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
