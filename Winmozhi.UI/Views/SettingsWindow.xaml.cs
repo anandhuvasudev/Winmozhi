@@ -14,7 +14,13 @@ public sealed partial class SettingsWindow : Window
 
         this.InitializeComponent();
 
-        try { AppWindow.TitleBar.ExtendsContentIntoTitleBar = true; } catch { }
+        try
+        {
+            // FIX: Using the XAML Window API correctly themes the titlebar caption buttons (Close/Min/Max) 
+            // automatically to match the System Backdrop (Light/Dark themes) instead of forcing them black.
+            this.ExtendsContentIntoTitleBar = true;
+        }
+        catch { }
 
         AppWindow.Closing += (s, e) =>
         {

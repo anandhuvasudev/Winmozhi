@@ -43,6 +43,11 @@ public sealed partial class PopupView : Window
         }
 
         MakeWindowTruePopup(_hwnd);
+
+        // Apply native Windows 11 perfect rounded corners to the popup Window itself
+        int cornerPreference = DWMWCP_ROUND;
+        DwmSetWindowAttribute(_hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, ref cornerPreference, 4);
+
         AppWindow.Resize(new Windows.Graphics.SizeInt32(180, 260));
 
         // Apply stored styling preferences
@@ -62,47 +67,44 @@ public sealed partial class PopupView : Window
     {
         try
         {
-            // Get the border element (main background)
             var grid = this.Content as Grid;
             if (grid?.Children.Count > 0 && grid.Children[0] is Border border)
             {
-                // Apply background color
+                // Ensure opacity alters the glass background alpha, NOT the text!
+                double opacity = LocalPreferences.PopupOpacity;
+                if (opacity < 0.1) opacity = 0.1;
+                if (opacity > 1.0) opacity = 1.0;
+
+                byte alpha = (byte)(opacity * 255);
+
                 string bgColorHex = LocalPreferences.PopupBackgroundColor;
                 if (TryParseColor(bgColorHex, out var bgColor))
                 {
-                    border.Background = new SolidColorBrush(bgColor);
+                    border.Background = new SolidColorBrush(Windows.UI.Color.FromArgb(alpha, bgColor.R, bgColor.G, bgColor.B));
                 }
                 else
                 {
-                    border.Background = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 26, 26, 26)); // Dark default
+                    border.Background = new SolidColorBrush(Windows.UI.Color.FromArgb(alpha, 26, 26, 26)); // Dark default
                 }
 
-                // Apply text color and font size
+                // Keep border itself at 1.0 so text inside doesn't become transparent
+                border.Opacity = 1.0;
+
+                // Apply Text styling
                 string textColorHex = LocalPreferences.PopupTextColor;
                 if (TryParseColor(textColorHex, out var textColor))
                 {
                     CurrentManglishText.Foreground = new SolidColorBrush(textColor);
-
-                    // Also apply to list items
-                    ApplyTextColorToListItems(textColor);
                 }
                 else
                 {
-                    CurrentManglishText.Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 255, 255, 255)); // White default
+                    CurrentManglishText.Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 255, 255, 255));
                 }
 
-                // Apply font size
                 double fontSize = LocalPreferences.PopupFontSize;
                 if (fontSize >= 10 && fontSize <= 32)
                 {
-                    CurrentManglishText.FontSize = fontSize;
-                }
-
-                // Apply opacity to border (and let Mica show through)
-                double opacity = LocalPreferences.PopupOpacity;
-                if (opacity >= 0.3 && opacity <= 1.0)
-                {
-                    border.Opacity = opacity;
+                    CurrentManglishText.FontSize = fontSize - 4; // Subtext is slightly smaller
                 }
             }
         }
@@ -112,22 +114,16 @@ public sealed partial class PopupView : Window
         }
     }
 
-    private void ApplyTextColorToListItems(Windows.UI.Color textColor)
+    // Handles dynamically assigning text color/font size to ListItems cleanly
+    private void SuggestionsListView_ContainerContentChanging(ListViewBase sender, ContainerContentChangingEventArgs args)
     {
-        // Apply the text color to all items in the ListView
-        if (SuggestionsListView?.Items != null)
+        if (args.ItemContainer.ContentTemplateRoot is TextBlock textBlock)
         {
-            foreach (var item in SuggestionsListView.Items)
+            if (TryParseColor(LocalPreferences.PopupTextColor, out var color))
             {
-                if (SuggestionsListView.ContainerFromItem(item) is ListViewItem container)
-                {
-                    if (container.ContentTemplateRoot is TextBlock textBlock)
-                    {
-                        textBlock.Foreground = new SolidColorBrush(textColor);
-                        textBlock.FontSize = LocalPreferences.PopupFontSize;
-                    }
-                }
+                textBlock.Foreground = new SolidColorBrush(color);
             }
+            textBlock.FontSize = LocalPreferences.PopupFontSize;
         }
     }
 
@@ -136,34 +132,20 @@ public sealed partial class PopupView : Window
         color = Windows.UI.Color.FromArgb(255, 255, 255, 255);  // Default to white
         try
         {
-            if (string.IsNullOrWhiteSpace(hexColor))
-                return false;
+            if (string.IsNullOrWhiteSpace(hexColor)) return false;
 
             hexColor = hexColor.TrimStart('#');
-            if (hexColor.Length != 6 && hexColor.Length != 8)
-                return false;
+            if (hexColor.Length != 6 && hexColor.Length != 8) return false;
 
             uint hex = uint.Parse(hexColor, System.Globalization.NumberStyles.HexNumber);
 
             if (hexColor.Length == 6)
             {
-                // RGB format
-                color = Windows.UI.Color.FromArgb(
-                    255,
-                    (byte)((hex >> 16) & 0xFF),
-                    (byte)((hex >> 8) & 0xFF),
-                    (byte)(hex & 0xFF)
-                );
+                color = Windows.UI.Color.FromArgb(255, (byte)((hex >> 16) & 0xFF), (byte)((hex >> 8) & 0xFF), (byte)(hex & 0xFF));
             }
             else
             {
-                // ARGB format
-                color = Windows.UI.Color.FromArgb(
-                    (byte)((hex >> 24) & 0xFF),
-                    (byte)((hex >> 16) & 0xFF),
-                    (byte)((hex >> 8) & 0xFF),
-                    (byte)(hex & 0xFF)
-                );
+                color = Windows.UI.Color.FromArgb((byte)((hex >> 24) & 0xFF), (byte)((hex >> 16) & 0xFF), (byte)((hex >> 8) & 0xFF), (byte)(hex & 0xFF));
             }
             return true;
         }
@@ -194,23 +176,11 @@ public sealed partial class PopupView : Window
                 int popupWidth = 180;
                 int popupHeight = 260;
 
-                // Push down by default to clear the line of text
                 int finalY = (int)y + 30;
                 int finalX = (int)x;
 
-                // FIX: If popping down goes off the screen (e.g. typing in Taskbar), push it UP above the cursor
-                if (finalY + popupHeight > screenH)
-                {
-                    finalY = (int)y - popupHeight - 10;
-                }
-
-                // FIX: If it goes off the right edge of screen
-                if (finalX + popupWidth > screenW)
-                {
-                    finalX = screenW - popupWidth - 10;
-                }
-
-                // Prevent negative coordinates
+                if (finalY + popupHeight > screenH) finalY = (int)y - popupHeight - 10;
+                if (finalX + popupWidth > screenW) finalX = screenW - popupWidth - 10;
                 if (finalY < 0) finalY = 10;
                 if (finalX < 0) finalX = 10;
 
@@ -233,6 +203,12 @@ public sealed partial class PopupView : Window
     static readonly IntPtr HWND_TOPMOST = new(-1);
     const uint SWP_NOSIZE = 0x0001;
     const uint SWP_NOACTIVATE = 0x0010;
+
+    // DWM API for perfect native rounded corners
+    [LibraryImport("dwmapi.dll")]
+    private static partial int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
+    private const int DWMWA_WINDOW_CORNER_PREFERENCE = 33;
+    private const int DWMWCP_ROUND = 2; // Perfect 8px Win11 radius
 
     [LibraryImport("user32.dll", SetLastError = true)]
     private static partial int GetWindowLongW(IntPtr hWnd, int nIndex);
