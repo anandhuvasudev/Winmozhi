@@ -50,16 +50,21 @@ public partial class App : Microsoft.UI.Xaml.Application
             {
                 await Host.StartAsync();
 
-                // 1. START THE HOOK (This is what listens to your typing!)
                 var hookService = Host.Services.GetRequiredService<IKeyboardHookService>();
                 hookService.StartHook();
 
-                // 2. CREATE AND ACTIVATE THE WINDOW
                 _popupWindow = Host.Services.GetRequiredService<Winmozhi.UI.Views.PopupView>();
                 _popupWindow.Activate();
-
-                // 3. HIDE IT IMMEDIATELY (It stays hidden until you type something)
                 _popupWindow.AppWindow.Hide();
+
+                // ---> NEW: WARM UP THE ENGINE IN THE BACKGROUND <---
+                // This forces .NET to load HTTP, JSON, and Google API handlers into memory 
+                // so the user experiences zero lag when they actually start typing.
+                _ = System.Threading.Tasks.Task.Run(async () =>
+                {
+                    var engine = Host.Services.GetRequiredService<ITransliterationEngine>();
+                    await engine.GetSuggestionsAsync("a", System.Threading.CancellationToken.None);
+                });
             }
         }
         catch (Exception ex)

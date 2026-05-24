@@ -15,12 +15,15 @@ public partial class PopupViewModel : ObservableObject
     private readonly DispatcherQueue _dispatcher;
     private CancellationTokenSource? _cts;
 
-    // REMOVED the "= string.Empty;" from here
     [ObservableProperty]
     public partial string CurrentManglish { get; set; }
 
     [ObservableProperty]
     public partial bool IsVisible { get; set; }
+
+    // ADDED FOR ARROW KEY HIGHLIGHTING
+    [ObservableProperty]
+    public partial int SelectedIndex { get; set; }
 
     public ObservableCollection<string> Suggestions { get; } = [];
 
@@ -29,13 +32,25 @@ public partial class PopupViewModel : ObservableObject
         _engine = engine;
         _hookService = hookService;
         _dispatcher = DispatcherQueue.GetForCurrentThread();
-
-        // ADDED INITIALIZATION HERE
         CurrentManglish = string.Empty;
 
-        // Subscribe to global typing events
         _hookService.OnWordTyped += HookService_OnWordTyped;
         _hookService.OnInsertRequested += HookService_OnInsertRequested;
+        _hookService.OnSelectionChangedRequested += HookService_OnSelectionChangedRequested;
+    }
+
+    private void HookService_OnSelectionChangedRequested(object? sender, int direction)
+    {
+        _dispatcher.TryEnqueue(() =>
+        {
+            if (Suggestions.Count == 0) return;
+
+            int newIndex = SelectedIndex + direction;
+            if (newIndex < 0) newIndex = Suggestions.Count - 1; // Wrap around to bottom
+            if (newIndex >= Suggestions.Count) newIndex = 0;    // Wrap around to top
+
+            SelectedIndex = newIndex;
+        });
     }
 
     private async void HookService_OnWordTyped(object? sender, string word)
@@ -43,7 +58,6 @@ public partial class PopupViewModel : ObservableObject
         _dispatcher.TryEnqueue(() =>
         {
             CurrentManglish = word;
-
             if (string.IsNullOrWhiteSpace(word))
             {
                 Suggestions.Clear();
@@ -57,33 +71,37 @@ public partial class PopupViewModel : ObservableObject
 
         _cts?.Cancel();
         _cts = new CancellationTokenSource();
+        var token = _cts.Token;
 
         try
         {
-            var results = await _engine.GetSuggestionsAsync(word, _cts.Token);
+            // FIX LAG: Wait 150ms before asking Google. If user types another letter, this gets cancelled!
+            await Task.Delay(150, token);
+
+            var results = await _engine.GetSuggestionsAsync(word, token);
 
             _dispatcher.TryEnqueue(() =>
             {
                 Suggestions.Clear();
-                foreach (var res in results)
-                {
-                    Suggestions.Add(res);
-                }
+                foreach (var res in results) Suggestions.Add(res);
 
+                SelectedIndex = 0; // Reset highlight to the top word
                 IsVisible = Suggestions.Count > 0;
                 _hookService.IsPopupVisible = IsVisible;
             });
         }
-        catch (TaskCanceledException) { /* Ignored (Debouncing) */ }
+        catch (TaskCanceledException) { /* Debounced */ }
     }
 
     private void HookService_OnInsertRequested(object? sender, EventArgs e)
     {
         _dispatcher.TryEnqueue(() =>
         {
-            if (Suggestions.Count > 0)
+            if (Suggestions.Count > 0 && SelectedIndex >= 0 && SelectedIndex < Suggestions.Count)
             {
-                var selectedWord = Suggestions[0];
+                var selectedWord = Suggestions[SelectedIndex];
+
+                // Inject the word!
                 _hookService.ReplaceWord(CurrentManglish.Length, selectedWord);
 
                 Suggestions.Clear();

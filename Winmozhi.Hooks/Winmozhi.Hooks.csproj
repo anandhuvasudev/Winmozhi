@@ -1,5 +1,4 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
-
 	<PropertyGroup>
 		<TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
 		<TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
@@ -10,8 +9,8 @@
 		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 	</PropertyGroup>
 
+	<!-- THIS IS THE CRUCIAL LINK THAT WAS MISSING/BROKEN -->
 	<ItemGroup>
 		<ProjectReference Include="..\Winmozhi.Core\Winmozhi.Core.csproj" />
 	</ItemGroup>
-
 </Project>

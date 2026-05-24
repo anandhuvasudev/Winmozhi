@@ -21,7 +21,7 @@ public sealed partial class PopupView : Window
 
         _hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
 
-        // 1. Remove Title Bar and Borders completely
+        // 1. Tell WinUI 3 to hide its default title bar
         AppWindow.TitleBar.ExtendsContentIntoTitleBar = true;
         var presenter = AppWindow.Presenter as OverlappedPresenter;
         if (presenter != null)
@@ -31,11 +31,11 @@ public sealed partial class PopupView : Window
             presenter.IsResizable = false;
         }
 
-        // 2. Win32 NO_ACTIVATE (Do not steal focus)
-        MakeWindowNoActivate(_hwnd);
+        // 2. Win32 Magic: Make it a True Popup & Don't steal focus
+        MakeWindowTruePopup(_hwnd);
 
-        // 3. Set a small size for the popup
-        AppWindow.Resize(new Windows.Graphics.SizeInt32(200, 250));
+        // 3. Set exact size so there is no empty space
+        AppWindow.Resize(new Windows.Graphics.SizeInt32(180, 260));
 
         ViewModel.PropertyChanged += ViewModel_PropertyChanged;
     }
@@ -48,7 +48,6 @@ public sealed partial class PopupView : Window
             {
                 var (x, y) = _hookService.GetCaretPosition();
 
-                // If Chrome/Edge hides the caret, use Mouse Position
                 if (x == -1)
                 {
                     GetCursorPos(out var mousePos);
@@ -56,23 +55,21 @@ public sealed partial class PopupView : Window
                     y = mousePos.Y + 20;
                 }
 
-                // Move the window near the cursor
                 AppWindow.Move(new Windows.Graphics.PointInt32((int)x + 10, (int)y + 10));
-
-                // FORCE SHOW THE WINDOW AND KEEP IT ON TOP
                 AppWindow.Show(false);
                 AppWindow.MoveInZOrderAtTop();
             }
             else
             {
-                // Hide when no suggestions
                 AppWindow.Hide();
             }
         }
     }
 
     // --- WIN32 NATIVE METHODS ---
+    const int GWL_STYLE = -16;
     const int GWL_EXSTYLE = -20;
+    const uint WS_POPUP = 0x80000000;
     const uint WS_EX_NOACTIVATE = 0x08000000;
     const uint WS_EX_TOOLWINDOW = 0x00000080;
 
@@ -88,9 +85,13 @@ public sealed partial class PopupView : Window
 
     public struct InteropPoint { public int X; public int Y; }
 
-    private static void MakeWindowNoActivate(IntPtr hwnd)
+    private static void MakeWindowTruePopup(IntPtr hwnd)
     {
+        // Use 'unchecked' to safely cast the massive uint down to an int
+        SetWindowLongW(hwnd, GWL_STYLE, unchecked((int)WS_POPUP));
+
+        // Add EX Styles (Don't steal focus, hide from Alt+Tab)
         int exStyle = GetWindowLongW(hwnd, GWL_EXSTYLE);
-        SetWindowLongW(hwnd, GWL_EXSTYLE, (int)(exStyle | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW));
+        SetWindowLongW(hwnd, GWL_EXSTYLE, exStyle | unchecked((int)(WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW)));
     }
 }

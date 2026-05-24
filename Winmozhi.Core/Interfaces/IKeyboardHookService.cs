@@ -1,17 +1,19 @@
-﻿namespace Winmozhi.Core.Interfaces;
+﻿using System;
+
+namespace Winmozhi.Core.Interfaces;
 
 public interface IKeyboardHookService
 {
     void StartHook();
     void StopHook();
-
-    // UI sets this to true when suggestions are visible so Tab is intercepted
     bool IsPopupVisible { get; set; }
 
-    event EventHandler<string> OnWordTyped; // Fires when the Manglish buffer changes
-    event EventHandler OnInsertRequested;   // Fires when Tab is pressed
+    event EventHandler<string> OnWordTyped;
+    event EventHandler OnInsertRequested;
 
-    // Methods for text injection
+    // THIS IS THE NEW EVENT FOR THE ARROW KEYS
+    event EventHandler<int> OnSelectionChangedRequested;
+
     void ReplaceWord(int backspaceCount, string malayalamWord);
     (double X, double Y) GetCaretPosition();
 }

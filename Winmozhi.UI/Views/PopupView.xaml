@@ -7,31 +7,38 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <Grid>
-        <Border Background="{ThemeResource ApplicationPageBackgroundThemeBrush}"
-                BorderBrush="{ThemeResource SystemControlForegroundBaseMediumLowBrush}"
+    <Window.SystemBackdrop>
+        <DesktopAcrylicBackdrop />
+    </Window.SystemBackdrop>
+
+    <Grid Background="Transparent">
+        <Border Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
+                BorderBrush="{ThemeResource SurfaceStrokeColorDefaultBrush}"
                 BorderThickness="1"
                 CornerRadius="8"
                 Padding="8"
-                Margin="10"
-                HorizontalAlignment="Left"
-                VerticalAlignment="Top">
+                HorizontalAlignment="Stretch"
+                VerticalAlignment="Stretch">
 
-            <StackPanel Spacing="4">
+            <StackPanel Spacing="2">
                 <TextBlock Text="{x:Bind ViewModel.CurrentManglish, Mode=OneWay}" 
                            FontSize="12" 
                            Foreground="Gray"
-                           Margin="4,0,0,4"/>
+                           Margin="8,0,0,4"/>
 
-                <ItemsControl ItemsSource="{x:Bind ViewModel.Suggestions, Mode=OneWay}">
-                    <ItemsControl.ItemTemplate>
+                <!-- LISTVIEW automatically highlights the SelectedIndex! -->
+                <ListView ItemsSource="{x:Bind ViewModel.Suggestions, Mode=OneWay}"
+                          SelectedIndex="{x:Bind ViewModel.SelectedIndex, Mode=OneWay}"
+                          SelectionMode="Single"
+                          IsItemClickEnabled="False"
+                          Margin="-8,0,-8,-8"
+                          Padding="4">
+                    <ListView.ItemTemplate>
                         <DataTemplate x:DataType="x:String">
-                            <Border CornerRadius="4" Padding="8,4" Margin="0,2">
-                                <TextBlock Text="{x:Bind}" FontSize="16" FontWeight="SemiBold"/>
-                            </Border>
+                            <TextBlock Text="{x:Bind}" FontSize="18" FontWeight="SemiBold" Padding="4,2"/>
                         </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
+                    </ListView.ItemTemplate>
+                </ListView>
             </StackPanel>
         </Border>
     </Grid>
