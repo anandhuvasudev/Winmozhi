@@ -19,6 +19,8 @@
 		<WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
 		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 		<Nullable>enable</Nullable>
+		<PublishReadyToRun>true</PublishReadyToRun>
+		<TieredCompilation>true</TieredCompilation>
 	</PropertyGroup>
 	<ItemGroup>
 	  <None Remove="Views\PopupView.xaml" />

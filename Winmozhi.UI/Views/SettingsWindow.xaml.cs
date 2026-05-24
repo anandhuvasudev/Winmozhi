@@ -1,4 +1,3 @@
-using CommunityToolkit.Mvvm.Input;
 using Microsoft.UI.Xaml;
 using Winmozhi.UI.ViewModels;
 
@@ -13,27 +12,29 @@ public sealed partial class SettingsWindow : Window
         this.InitializeComponent();
         ViewModel = viewModel;
 
-        // Customise window sizes
         AppWindow.Resize(new Windows.Graphics.SizeInt32(500, 600));
 
-        // When user clicks the "X" (Close button), minimize to System Tray instead of exiting.
         AppWindow.Closing += (s, e) =>
         {
-            e.Cancel = true;      // Prevent actual destruction of the window
-            AppWindow.Hide();     // Hide it (runs in background)
+            e.Cancel = true;
+            AppWindow.Hide();
+            Winmozhi.Core.Utilities.MemoryOptimizer.TrimMemory();
         };
     }
 
-    // Command to show window from tray double-click
-    [RelayCommand]
+    private void TrayIcon_DoubleTapped(object sender, RoutedEventArgs e)
+    {
+        ShowSettings();
+    }
+
+    private void ShowSettings_Click(object sender, RoutedEventArgs e)
+    {
+        ShowSettings();
+    }
+
     private void ShowSettings()
     {
         AppWindow.Show();
-        this.Activate(); // Brings window to front
-    }
-
-    private void ShowSettings_Click(object _1, RoutedEventArgs _2)
-    {
-        ShowSettings();
+        this.Activate();
     }
 }

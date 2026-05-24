@@ -1,5 +1,8 @@
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
+using Microsoft.UI.Xaml.Data;
 using System;
 using System.Runtime.InteropServices;
 using Winmozhi.Core.Interfaces;
@@ -20,6 +23,24 @@ public sealed partial class PopupView : Window
         _hookService = hookService;
 
         _hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+
+        // Bind UI elements to ViewModel
+        CurrentManglishText.DataContext = viewModel;
+        SuggestionsListView.DataContext = viewModel;
+
+        // Set bindings
+        CurrentManglishText.SetBinding(TextBlock.TextProperty, 
+            new Binding { Path = new PropertyPath(nameof(PopupViewModel.CurrentManglish)), Mode = BindingMode.OneWay });
+        SuggestionsListView.SetBinding(ListView.ItemsSourceProperty,
+            new Binding { Path = new PropertyPath(nameof(PopupViewModel.Suggestions)), Mode = BindingMode.OneWay });
+
+        // Use TwoWay binding for SelectedIndex to ensure arrow key changes update the UI
+        SuggestionsListView.SetBinding(Selector.SelectedIndexProperty,
+            new Binding { Path = new PropertyPath(nameof(PopupViewModel.SelectedIndex)), Mode = BindingMode.TwoWay });
+
+        // Also add SelectedItem binding for robust selection tracking
+        SuggestionsListView.SetBinding(Selector.SelectedItemProperty,
+            new Binding { Path = new PropertyPath(nameof(PopupViewModel.Suggestions)), Mode = BindingMode.OneWay });
 
         AppWindow.TitleBar.ExtendsContentIntoTitleBar = true;
         var presenter = AppWindow.Presenter as OverlappedPresenter;

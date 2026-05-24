@@ -60,9 +60,21 @@ public partial class PopupViewModel : ObservableObject
         _dispatcher.TryEnqueue(() =>
         {
             if (Suggestions.Count == 0) return;
-            int newIndex = SelectedIndex + direction;
-            if (newIndex < 0) newIndex = Suggestions.Count - 1;
-            else if (newIndex >= Suggestions.Count) newIndex = 0;
+
+            // Calculate the new index
+            int currentIndex = SelectedIndex;
+            if (currentIndex < 0 || currentIndex >= Suggestions.Count)
+                currentIndex = 0; // Reset if out of bounds
+
+            int newIndex = currentIndex + direction;
+
+            // Wrap around: down from last goes to first, up from first goes to last
+            if (newIndex < 0) 
+                newIndex = Suggestions.Count - 1;
+            else if (newIndex >= Suggestions.Count) 
+                newIndex = 0;
+
+            // Always update to force UI refresh, even if same index (at boundaries)
             SelectedIndex = newIndex;
         });
     }
@@ -101,6 +113,7 @@ public partial class PopupViewModel : ObservableObject
                 Suggestions.Clear();
                 IsVisible = false;
                 _hookService.IsPopupVisible = false;
+                Winmozhi.Core.Utilities.MemoryOptimizer.TrimMemory();
             }
         });
 
@@ -112,28 +125,24 @@ public partial class PopupViewModel : ObservableObject
 
         try
         {
-            // ---> FIX: PHASE 1 (INSTANT) HAPPENS IMMEDIATELY, NO DELAY <---
-            var instantResults = (await _engine
-                .GetInstantSuggestionsAsync(word, token)
-                .ConfigureAwait(false))
-                .ToList();
+            // 1. Fetch Instant Results (Memory / SQLite)
+            var instantResults = (await _engine.GetInstantSuggestionsAsync(word, token).ConfigureAwait(false)).ToList();
 
+            if (token.IsCancellationRequested) return;
+
+            // PUSH INSTANT RESULTS TO UI IMMEDIATELY
             _dispatcher.TryEnqueue(() =>
             {
                 if (token.IsCancellationRequested) return;
                 ApplySuggestions(instantResults, preserveSelection: false);
             });
 
-            // ---> FIX: DEBOUNCE ONLY THE NETWORK CALL <---
+            // 2. Wait a moment to ensure they stopped typing before calling Google
             await Task.Delay(150, token).ConfigureAwait(false);
 
-            // Phase 2: Google results (non-blocking)
-            var onlineResults = (await _engine
-                .GetOnlineSuggestionsAsync(word, token)
-                .ConfigureAwait(false))
-                .ToList();
+            var onlineResults = (await _engine.GetOnlineSuggestionsAsync(word, token).ConfigureAwait(false)).ToList();
 
-            if (onlineResults.Count == 0) return;
+            if (token.IsCancellationRequested || onlineResults.Count == 0) return;
 
             var merged = MergeSuggestions(instantResults, onlineResults);
 
@@ -143,11 +152,7 @@ public partial class PopupViewModel : ObservableObject
                 ApplySuggestions(merged, preserveSelection: true);
             });
         }
-        catch (OperationCanceledException) { /* Ignored */ }
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine($"[PopupViewModel] {ex}");
-        }
+        catch (OperationCanceledException) { }
     }
 
     // ── Insert Requested (Tab / Space / Enter) ────────────────────────────────────
@@ -179,6 +184,9 @@ public partial class PopupViewModel : ObservableObject
             Suggestions.Clear();
             IsVisible = false;
             _hookService.IsPopupVisible = false;
+
+            // ---> NEW: FREE RAM WHEN POPUP CLOSES <---
+            Winmozhi.Core.Utilities.MemoryOptimizer.TrimMemory();
         });
     }
 

@@ -14,8 +14,7 @@
         <!-- SYSTEM TRAY ICON (Runs in the background) -->
         <tb:TaskbarIcon x:Name="TrayIcon"
                         ToolTipText="Winmozhi Manglish Keyboard"
-                        IconSource="/Assets/Square44x44Logo.png"
-                        DoubleClickCommand="{x:Bind ShowSettingsCommand}">
+                        DoubleTapped="TrayIcon_DoubleTapped">
 
             <tb:TaskbarIcon.ContextFlyout>
                 <MenuFlyout>
@@ -37,22 +36,23 @@
         </tb:TaskbarIcon>
 
         <!-- SETTINGS UI -->
-        <StackPanel Padding="32" Spacing="24" MaxWidth="600" HorizontalAlignment="Left">
-            <TextBlock Text="Winmozhi Settings" FontSize="28" FontWeight="SemiBold" />
-
-            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" 
-                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" 
-                    BorderThickness="1" CornerRadius="8" Padding="16">
-
-                <StackPanel Spacing="16">
-                    <ToggleSwitch Header="Enable Keyboard Hook" 
+        <StackPanel Spacing="16">
+            <!-- Hook Toggle -->
+            <ToggleSwitch Header="Enable Keyboard Hook" 
                                   IsOn="{x:Bind ViewModel.IsEnabled, Mode=TwoWay}" 
                                   OffContent="Paused" OnContent="Running" />
 
-                    <TextBlock Text="When paused, typing will not show Malayalam suggestions." 
-                               Foreground="Gray" FontSize="12" Margin="0,-8,0,0"/>
-                </StackPanel>
-            </Border>
+            <MenuFlyoutSeparator Margin="0,8,0,8" />
+
+            <!-- Clear History Button -->
+            <StackPanel Spacing="8">
+                <TextBlock Text="Data Management" FontWeight="SemiBold" />
+                <Button Content="Clear Learning History" 
+                                Command="{x:Bind ViewModel.ClearHistoryCommand}" 
+                                Style="{ThemeResource AccentButtonStyle}" />
+                <TextBlock Text="{x:Bind ViewModel.HistoryStatusMessage, Mode=OneWay}" 
+                                   Foreground="Green" FontSize="12" />
+            </StackPanel>
         </StackPanel>
     </Grid>
 </Window>

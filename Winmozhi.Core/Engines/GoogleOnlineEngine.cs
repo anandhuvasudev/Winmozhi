@@ -4,54 +4,157 @@ using Winmozhi.Core.Interfaces;
 
 namespace Winmozhi.Core.Engines;
 
-// Using C# Primary Constructor for cleaner DI injection
+/// <summary>
+/// Google Transliteration API engine with robust error handling, retries, timeout management, and caching.
+/// Optimized for production use with detailed diagnostics and performance optimization.
+/// </summary>
 public class GoogleOnlineEngine(HttpClient httpClient, ILogger<GoogleOnlineEngine> logger) : IOnlineEngine
 {
     private const string ApiUrl = "https://inputtools.google.com/request?text={0}&itc=ml-t-i0-und&num=5&cp=0&cs=1&ie=utf-8&oe=utf-8";
+    private const int MaxRetries = 2;
+    private const int InitialTimeoutMs = 1500;  // Increased from 600ms to allow network handshake
+
+    private readonly ResultCache _cache = new(maxEntries: 1000, expirationMinutes: 120);
 
     public async Task<List<string>> FetchSuggestionsAsync(string manglishText, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(manglishText)) return [];
 
-        try
+        // Check cache first - immediate response without network call
+        if (_cache.TryGet(manglishText, out var cachedResults))
         {
-            string url = string.Format(ApiUrl, Uri.EscapeDataString(manglishText));
+            logger.LogTrace("Cache hit for: {Text}", manglishText);
+            return cachedResults;
+        }
 
-            // Send request and respect the CancellationToken for Debouncing
-            using var response = await httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
-            response.EnsureSuccessStatusCode();
-
-            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-            using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
-
-            var root = document.RootElement;
-
-            // Ensure API returned SUCCESS
-            if (root.GetArrayLength() > 0 && root[0].GetString() == "SUCCESS")
+        for (int attempt = 0; attempt <= MaxRetries; attempt++)
+        {
+            try
             {
-                var transliterations = root[1][0][1];
-                var results = new List<string>(transliterations.GetArrayLength());
+                string url = string.Format(ApiUrl, Uri.EscapeDataString(manglishText));
 
-                foreach (var item in transliterations.EnumerateArray())
+                // Create a timeout token that's longer than the cancellation token to allow full request
+                using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                timeoutCts.CancelAfter(TimeSpan.FromMilliseconds(InitialTimeoutMs));
+
+                // Send request with proper timeout handling
+                using var response = await httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, timeoutCts.Token);
+
+                if (!response.IsSuccessStatusCode)
                 {
-                    var word = item.GetString();
-                    if (!string.IsNullOrEmpty(word))
-                        results.Add(word);
+                    logger.LogDebug("Google API HTTP error {StatusCode} for: {Text}", response.StatusCode, manglishText);
+                    if (attempt < MaxRetries)
+                    {
+                        await Task.Delay(100 * (attempt + 1), cancellationToken); // Exponential backoff
+                        continue;
+                    }
+                    return [];
                 }
 
-                return results;
+                await using var stream = await response.Content.ReadAsStreamAsync(timeoutCts.Token);
+                using var document = await JsonDocument.ParseAsync(stream, cancellationToken: timeoutCts.Token);
+
+                var result = ParseJsonResponse(document, manglishText);
+                if (result.Any())
+                {
+                    // Cache successful results
+                    _cache.Set(manglishText, result);
+                    logger.LogTrace("Google API returned {Count} suggestions for: {Text}", result.Count, manglishText);
+                    return result;
+                }
+
+                // If parsing returned empty, retry
+                if (attempt < MaxRetries)
+                {
+                    await Task.Delay(50 * (attempt + 1), cancellationToken);
+                    continue;
+                }
+
+                return [];
             }
-        }
-        catch (OperationCanceledException)
-        {
-            // Expected during typing (debouncing). Do not log as an error.
-            logger.LogTrace("Google API call cancelled for: {Text}", manglishText);
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Failed to fetch online suggestions for: {Text}", manglishText);
+            catch (OperationCanceledException)
+            {
+                // Cancelled by debounce or timeout - expected during typing
+                if (attempt < MaxRetries && !cancellationToken.IsCancellationRequested)
+                {
+                    logger.LogTrace("Google API timeout on attempt {Attempt}, retrying for: {Text}", attempt + 1, manglishText);
+                    await Task.Delay(100, cancellationToken);
+                    continue;
+                }
+                logger.LogTrace("Google API call cancelled for: {Text}", manglishText);
+                return [];
+            }
+            catch (HttpRequestException ex)
+            {
+                logger.LogDebug(ex, "HTTP error on attempt {Attempt} for: {Text}", attempt + 1, manglishText);
+                if (attempt < MaxRetries)
+                {
+                    await Task.Delay(100 * (attempt + 1), cancellationToken);
+                    continue;
+                }
+                return [];
+            }
+            catch (JsonException ex)
+            {
+                logger.LogDebug(ex, "JSON parsing error for: {Text}", manglishText);
+                return [];
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Unexpected error fetching suggestions for: {Text}", manglishText);
+                return [];
+            }
         }
 
         return [];
+    }
+
+    private static List<string> ParseJsonResponse(JsonDocument document, string manglishText)
+    {
+        try
+        {
+            var root = document.RootElement;
+
+            // Verify response array structure
+            if (root.ValueKind != JsonValueKind.Array || root.GetArrayLength() < 2)
+                return [];
+
+            // Check if first element is "SUCCESS"
+            var firstElement = root[0];
+            if (firstElement.ValueKind != JsonValueKind.String || firstElement.GetString() != "SUCCESS")
+                return [];
+
+            // Navigate: root[1][0][1]
+            var secondElement = root[1];
+            if (secondElement.ValueKind != JsonValueKind.Array || secondElement.GetArrayLength() == 0)
+                return [];
+
+            var firstResult = secondElement[0];
+            if (firstResult.ValueKind != JsonValueKind.Array || firstResult.GetArrayLength() < 2)
+                return [];
+
+            var transliterations = firstResult[1];
+            if (transliterations.ValueKind != JsonValueKind.Array)
+                return [];
+
+            var results = new List<string>();
+            foreach (var item in transliterations.EnumerateArray())
+            {
+                if (item.ValueKind == JsonValueKind.String)
+                {
+                    var word = item.GetString();
+                    if (!string.IsNullOrWhiteSpace(word) && !results.Contains(word, StringComparer.Ordinal))
+                    {
+                        results.Add(word);
+                    }
+                }
+            }
+
+            return results;
+        }
+        catch
+        {
+            return [];
+        }
     }
 }

@@ -21,21 +21,21 @@
                 VerticalAlignment="Stretch">
 
             <StackPanel Spacing="2">
-                <TextBlock Text="{x:Bind ViewModel.CurrentManglish, Mode=OneWay}" 
+                <TextBlock x:Name="CurrentManglishText"
                            FontSize="12" 
                            Foreground="Gray"
                            Margin="8,0,0,4"/>
 
                 <!-- LISTVIEW automatically highlights the SelectedIndex! -->
-                <ListView ItemsSource="{x:Bind ViewModel.Suggestions, Mode=OneWay}"
-                          SelectedIndex="{x:Bind ViewModel.SelectedIndex, Mode=OneWay}"
+                <ListView x:Name="SuggestionsListView"
                           SelectionMode="Single"
                           IsItemClickEnabled="False"
                           Margin="-8,0,-8,-8"
                           Padding="4">
                     <ListView.ItemTemplate>
-                        <DataTemplate x:DataType="x:String">
-                            <TextBlock Text="{x:Bind}" FontSize="18" FontWeight="SemiBold" Padding="4,2"/>
+                        <!-- FIX: Use standard Binding instead of x:Bind for primitive strings -->
+                        <DataTemplate>
+                            <TextBlock Text="{Binding}" FontSize="18" FontWeight="SemiBold" Padding="4,2"/>
                         </DataTemplate>
                     </ListView.ItemTemplate>
                 </ListView>

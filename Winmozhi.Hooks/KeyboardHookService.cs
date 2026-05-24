@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Threading;
 using Winmozhi.Core.Interfaces;
 using Winmozhi.Hooks.Native;
 
@@ -17,7 +18,7 @@ public class KeyboardHookService : IKeyboardHookService
     // _currentWord is written by the hook thread (HookCallback) and cleared by the
     // UI thread (ReplaceWord via TryEnqueue). _wordLock guards both accesses.
     private readonly StringBuilder _currentWord = new();
-    private readonly object _wordLock = new();
+    private readonly Lock _wordLock = new();
 
     // ── IsPopupVisible ────────────────────────────────────────────────────────────
     // BUG FIX: This field MUST be volatile.
@@ -111,7 +112,7 @@ public class KeyboardHookService : IKeyboardHookService
             // ── Word buffer management ────────────────────────────────────────────
             string? wordSnapshot = null;
 
-            lock (_wordLock)
+            using (_wordLock.EnterScope())
             {
                 if (key is >= 0x41 and <= 0x5A)  // A–Z (virtual key codes are uppercase)
                 {
@@ -144,45 +145,49 @@ public class KeyboardHookService : IKeyboardHookService
 
     // ── Text Replacement (called from UI thread via TryEnqueue) ───────────────────
 
+    // ── Text Replacement (called from UI thread via TryEnqueue) ───────────────────
+
     public void ReplaceWord(int backspaceCount, string malayalamWord, string trailingText = "")
     {
-        // Pre-allocate to avoid resizing: 2 inputs per char (keydown + keyup)
-        var inputs = new List<NativeMethods.INPUT>(
-            (backspaceCount + malayalamWord.Length + trailingText.Length) * 2);
+        var inputs = new List<NativeMethods.INPUT>();
 
-        // Step 1 — Erase the typed Manglish text with Backspace key events
+        // STEP 1: Hold down the SHIFT key
+        inputs.Add(CreateKeyInput(0x10, false)); // VK_SHIFT = 0x10
+
+        // STEP 2: Send 'Left Arrow' rapidly to highlight the entire Manglish word
         for (int i = 0; i < backspaceCount; i++)
         {
-            inputs.Add(CreateKeyInput(0x08, false)); // VK_BACK down
-            inputs.Add(CreateKeyInput(0x08, true));  // VK_BACK up
+            inputs.Add(CreateKeyInput(0x25, false)); // VK_LEFT = 0x25 (Key Down)
+            inputs.Add(CreateKeyInput(0x25, true));  // VK_LEFT (Key Up)
         }
 
-        // Step 2 — Inject the Malayalam word + optional trailing character
+        // STEP 3: Release the SHIFT key (Word is now fully highlighted)
+        inputs.Add(CreateKeyInput(0x10, true)); // VK_SHIFT Up
+
+        // STEP 4: Inject the Malayalam Unicode text (Instantly overwrites highlighted text)
         string fullText = malayalamWord + trailingText;
         foreach (char c in fullText)
         {
             if (c == '\n')
             {
-                // Send a real Enter virtual key so apps recognise it as line-break
                 inputs.Add(CreateKeyInput(0x0D, false));
                 inputs.Add(CreateKeyInput(0x0D, true));
             }
             else
             {
-                // KEYEVENTF_UNICODE injects the UTF-16 code unit directly.
-                // Works for all Malayalam characters (U+0D00–U+0D7F, all in BMP).
                 inputs.Add(CreateUnicodeInput(c, false));
                 inputs.Add(CreateUnicodeInput(c, true));
             }
         }
 
+        // Send all commands to Windows simultaneously
         NativeMethods.SendInput(
             (uint)inputs.Count,
             inputs.ToArray(),
             Marshal.SizeOf<NativeMethods.INPUT>());
 
-        // Step 3 — Reset hook state so the next word starts clean
-        lock (_wordLock)
+        // Step 5: Reset hook state cleanly
+        using (_wordLock.EnterScope())
         {
             _currentWord.Clear();
         }
