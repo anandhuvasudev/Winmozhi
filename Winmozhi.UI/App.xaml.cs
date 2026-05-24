@@ -50,9 +50,16 @@ public partial class App : Microsoft.UI.Xaml.Application
             {
                 await Host.StartAsync();
 
-                // ONLY show the window. Don't start hooks yet to isolate the bug.
+                // 1. START THE HOOK (This is what listens to your typing!)
+                var hookService = Host.Services.GetRequiredService<IKeyboardHookService>();
+                hookService.StartHook();
+
+                // 2. CREATE AND ACTIVATE THE WINDOW
                 _popupWindow = Host.Services.GetRequiredService<Winmozhi.UI.Views.PopupView>();
                 _popupWindow.Activate();
+
+                // 3. HIDE IT IMMEDIATELY (It stays hidden until you type something)
+                _popupWindow.AppWindow.Hide();
             }
         }
         catch (Exception ex)
@@ -61,7 +68,8 @@ public partial class App : Microsoft.UI.Xaml.Application
         }
     }
 
-    private void WriteCrashLog(string fileName, string error)
+    // Fixed CA1822 Warning by making this static
+    private static void WriteCrashLog(string fileName, string error)
     {
         string desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
         string errorFile = System.IO.Path.Combine(desktopPath, $"{fileName}.txt");

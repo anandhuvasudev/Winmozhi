@@ -59,8 +59,9 @@ public sealed partial class PopupView : Window
                 // Move the window near the cursor
                 AppWindow.Move(new Windows.Graphics.PointInt32((int)x + 10, (int)y + 10));
 
-                // Show without taking focus
+                // FORCE SHOW THE WINDOW AND KEEP IT ON TOP
                 AppWindow.Show(false);
+                AppWindow.MoveInZOrderAtTop();
             }
             else
             {
