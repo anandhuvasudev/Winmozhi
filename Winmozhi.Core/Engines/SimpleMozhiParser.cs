@@ -1,9 +1,7 @@
-﻿namespace Winmozhi.Core.Engines;
+﻿using System.Text;
 
-/// <summary>
-/// Production-level offline transliteration algorithm for Manglish (English) to Malayalam.
-/// Handles complex consonant clusters, vowel combinations, and common patterns.
-/// </summary>
+namespace Winmozhi.Core.Engines;
+
 public static class SimpleMozhiParser
 {
     public static string Parse(string manglish)
@@ -11,160 +9,185 @@ public static class SimpleMozhiParser
         if (string.IsNullOrWhiteSpace(manglish)) return string.Empty;
 
         manglish = manglish.ToLowerInvariant();
-        var result = new System.Text.StringBuilder();
+        var sb = new StringBuilder();
+        bool lastWasConsonant = false;
 
         int i = 0;
         while (i < manglish.Length)
         {
-            // Try to match multi-character patterns first (greedy approach)
-            bool matched = false;
-
-            // ── Three-character patterns ─────────────────────────────────────
-            if (i + 2 < manglish.Length)
+            var vowelMatch = MatchVowel(manglish, i);
+            if (vowelMatch != null)
             {
-                string three = manglish.Substring(i, 3);
-                if (TryMatchThreeChar(three, result))
+                if (lastWasConsonant)
                 {
-                    i += 3;
-                    matched = true;
+                    if (sb.Length > 0 && sb[^1] == '്') sb.Length--;
+                    sb.Append(GetVowelSign(vowelMatch));
                 }
-            }
-
-            // ── Two-character patterns ───────────────────────────────────────
-            if (!matched && i + 1 < manglish.Length)
-            {
-                string two = manglish.Substring(i, 2);
-                if (TryMatchTwoChar(two, result))
+                else
                 {
-                    i += 2;
-                    matched = true;
+                    sb.Append(GetIndependentVowel(vowelMatch));
                 }
+                lastWasConsonant = false;
+                i += vowelMatch.Length;
+                continue;
             }
 
-            // ── Single-character patterns ────────────────────────────────────
-            if (!matched)
+            var consonantMatch = MatchConsonant(manglish, i);
+            if (consonantMatch != null)
             {
-                char ch = manglish[i];
-                if (TryMatchSingleChar(ch, result, i == 0))
+                bool isLastChar = (i + consonantMatch.Length == manglish.Length);
+                bool nextIsConsonant = !isLastChar && MatchVowel(manglish, i + consonantMatch.Length) == null;
+
+                if ((isLastChar || nextIsConsonant) && GetChillu(consonantMatch, out string chillu))
                 {
-                    i++;
-                    matched = true;
+                    sb.Append(chillu);
+                    lastWasConsonant = false;
                 }
+                else
+                {
+                    sb.Append(GetConsonantBase(consonantMatch)).Append('്');
+                    lastWasConsonant = true;
+                }
+                i += consonantMatch.Length;
+                continue;
             }
 
-            // ── Fallback: keep the character as-is ───────────────────────────
-            if (!matched)
-            {
-                result.Append(manglish[i]);
-                i++;
-            }
+            sb.Append(manglish[i]);
+            lastWasConsonant = false;
+            i++;
         }
 
-        return result.ToString();
+        return sb.ToString();
     }
 
-    private static bool TryMatchThreeChar(string pattern, System.Text.StringBuilder result)
+    private static string? MatchVowel(string text, int index)
     {
-        return pattern switch
+        string[] vowels = ["aa", "ee", "oo", "au", "ou", "ai", "ei", "ae", "oa", "am", "um", "ah", "a", "e", "i", "o", "u"];
+        foreach (var v in vowels)
         {
-            // Explicit chillu + vowel patterns
-            "njan" => AppendAndTrue(result, "ഞാൻ"),
-            "kkha" => AppendAndTrue(result, "ക്ഖ"),
-            "ksha" => AppendAndTrue(result, "ക്ഷ"),
-            "shya" => AppendAndTrue(result, "ശ്യ"),
-            "nya" => AppendAndTrue(result, "ന്യ"),
-            "jnya" => AppendAndTrue(result, "ജ്ഞ"),
-            "ttha" => AppendAndTrue(result, "ത്ത"),
-            "ddha" => AppendAndTrue(result, "ഡ്ധ"),
-            "ndha" => AppendAndTrue(result, "ന്ധ"),
-            "stha" => AppendAndTrue(result, "സ്ത"),
-            _ => false,
-        };
+            if (index + v.Length <= text.Length && text.Substring(index, v.Length) == v)
+                return v;
+        }
+        return null;
     }
 
-    private static bool TryMatchTwoChar(string pattern, System.Text.StringBuilder result)
+    private static string? MatchConsonant(string text, int index)
     {
-        return pattern switch
+        string[] consonants = ["shh", "chh", "nth", "nch", "sth", "nd", "nj", "ng", "th", "dh", "ph", "bh", "sh", "ch", "jh", "gh", "kh", "zh", "kk", "mm", "nn", "ll", "rr", "tt", "pp", "k", "g", "c", "j", "t", "d", "n", "p", "f", "b", "m", "y", "r", "l", "v", "w", "s", "h", "z", "x", "q"];
+        foreach (var c in consonants)
         {
-            // ── Digraph Consonants (Conjuncts) ──────────────────────────
-            "nj" => AppendAndTrue(result, "ഞ്"),
-            "ng" => AppendAndTrue(result, "ങ്"),
-            "ny" => AppendAndTrue(result, "ന്യ"),
-            "zh" => AppendAndTrue(result, "ഴ്"),
-            "sh" => AppendAndTrue(result, "ശ്"),
-            "ch" => AppendAndTrue(result, "ച്"),
-            "th" => AppendAndTrue(result, "ത്"),
-            "ph" => AppendAndTrue(result, "ഫ്"),
-            "kh" => AppendAndTrue(result, "ഖ്"),
-            "gh" => AppendAndTrue(result, "ഘ്"),
-            "bh" => AppendAndTrue(result, "ഭ്"),
-            "dh" => AppendAndTrue(result, "ധ്"),
-            "nh" => AppendAndTrue(result, "ണ്"),
-            "rh" => AppendAndTrue(result, "ര്"),
-
-            // ── Double Vowels ───────────────────────────────────────────
-            "aa" => AppendAndTrue(result, "ാ"),
-            "ee" => AppendAndTrue(result, "ീ"),
-            "oo" => AppendAndTrue(result, "ൂ"),
-            "ai" => AppendAndTrue(result, "ൈ"),
-            "au" => AppendAndTrue(result, "ൗ"),
-
-            // ── Explicit Chillu Letters ──────────────────────────────────
-            "il" => AppendAndTrue(result, "ിൽ"),
-            "al" => AppendAndTrue(result, "ാൽ"),
-            "ar" => AppendAndTrue(result, "ാർ"),
-            "an" => AppendAndTrue(result, "ാൻ"),
-            "am" => AppendAndTrue(result, "ാം"),
-            "um" => AppendAndTrue(result, "ും"),
-            "nn" => AppendAndTrue(result, "ണ്ണ്"),
-
-            _ => false,
-        };
+            if (index + c.Length <= text.Length && text.Substring(index, c.Length) == c)
+                return c;
+        }
+        return null;
     }
 
-    private static bool TryMatchSingleChar(char ch, System.Text.StringBuilder result, bool isStart)
+    private static string GetIndependentVowel(string v) => v switch
     {
-        bool matched = ch switch
+        "a" => "അ",
+        "aa" => "ആ",
+        "i" => "ഇ",
+        "ee" => "ഈ",
+        "u" => "ഉ",
+        "oo" => "ഊ",
+        "e" => "എ",
+        "ae" => "ഏ",
+        "ai" => "ഐ",
+        "ei" => "ഐ",
+        "o" => "ഒ",
+        "oa" => "ഓ",
+        "au" => "ഔ",
+        "ou" => "ഔ",
+        "am" => "അം",
+        "um" => "ഉം",
+        "ah" => "അഃ",
+        _ => ""
+    };
+
+    private static string GetVowelSign(string v) => v switch
+    {
+        "a" => "",
+        "aa" => "ാ",
+        "i" => "ി",
+        "ee" => "ീ",
+        "u" => "ു",
+        "oo" => "ൂ",
+        "e" => "െ",
+        "ae" => "േ",
+        "ai" => "ൈ",
+        "ei" => "ൈ",
+        "o" => "ൊ",
+        "oa" => "ോ",
+        "au" => "ൌ",
+        "ou" => "ൌ",
+        "am" => "ം",
+        "um" => "ും",
+        "ah" => "ഃ",
+        _ => ""
+    };
+
+    private static string GetConsonantBase(string c) => c switch
+    {
+        "k" => "ക",
+        "kk" => "ക്ക",
+        "kh" => "ഖ",
+        "g" => "ഗ",
+        "gh" => "ഘ",
+        "ng" => "ങ",
+        "c" => "ച",
+        "ch" => "ച",
+        "chh" => "ഛ",
+        "j" => "ജ",
+        "jh" => "ഝ",
+        "nj" => "ഞ",
+        "nch" => "ഞ്ച",
+        "t" => "ട",
+        "tt" => "ട്ട",
+        "th" => "ത",
+        "nth" => "ന്ത",
+        "d" => "ഡ",
+        "dh" => "ധ",
+        "nd" => "ണ്ട",
+        "n" => "ന",
+        "nn" => "ന്ന",
+        "p" => "പ",
+        "pp" => "പ്പ",
+        "ph" => "ഫ",
+        "f" => "ഫ",
+        "b" => "ബ",
+        "bh" => "ഭ",
+        "m" => "മ",
+        "mm" => "മ്മ",
+        "y" => "യ",
+        "r" => "ര",
+        "rr" => "റ്റ",
+        "l" => "ല",
+        "ll" => "ല്ല",
+        "v" => "വ",
+        "w" => "വ",
+        "sh" => "ശ",
+        "shh" => "ഷ",
+        "s" => "സ",
+        "h" => "ഹ",
+        "zh" => "ഴ",
+        "z" => "സ",
+        "x" => "ക്സ",
+        "q" => "ക",
+        "sth" => "സ്ഥ",
+        _ => "ക"
+    };
+
+    private static bool GetChillu(string c, out string chillu)
+    {
+        chillu = c switch
         {
-            // ── Consonants (with Virama ്) ───────────────────────────
-            'k' => AppendAndTrue(result, "ക്"),
-            'p' => AppendAndTrue(result, "പ്"),
-            'm' => AppendAndTrue(result, "മ്"),
-            'n' => AppendAndTrue(result, "ന്"),
-            'l' => AppendAndTrue(result, "ല്"),
-            's' => AppendAndTrue(result, "സ്"),
-            'r' => AppendAndTrue(result, "ര്"),
-            't' => AppendAndTrue(result, "ത്"),
-            'v' => AppendAndTrue(result, "വ്"),
-            'w' => AppendAndTrue(result, "വ്"),
-            'y' => AppendAndTrue(result, "യ്"),
-            'b' => AppendAndTrue(result, "ബ്"),
-            'd' => AppendAndTrue(result, "ഡ്"),
-            'g' => AppendAndTrue(result, "ഗ്"),
-            'h' => AppendAndTrue(result, "ഹ്"),
-            'j' => AppendAndTrue(result, "ജ്"),
-            'c' => AppendAndTrue(result, "ക്"),
-            'f' => AppendAndTrue(result, "ഫ്"),
-            'q' => AppendAndTrue(result, "ക്"),
-            'x' => AppendAndTrue(result, "ക്സ്"),
-            'z' => AppendAndTrue(result, "സ്"),
-
-            // ── Vowels (Start or after Virama removal) ───────────────────
-            'a' => AppendAndTrue(result, isStart ? "അ" : ""),  // Removes Virama at end
-            'e' => AppendAndTrue(result, isStart ? "എ" : "െ"),
-            'i' => AppendAndTrue(result, isStart ? "ഇ" : "ി"),
-            'o' => AppendAndTrue(result, isStart ? "ഒ" : "ൊ"),
-            'u' => AppendAndTrue(result, isStart ? "ഉ" : "ു"),
-
-            _ => false,
+            "l" => "ൽ",
+            "n" => "ൻ",
+            "r" => "ർ",
+            "m" => "ം",
+            "ll" => "ൾ",
+            _ => ""
         };
-
-        return matched;
-    }
-
-    private static bool AppendAndTrue(System.Text.StringBuilder sb, string text)
-    {
-        sb.Append(text);
-        return true;
+        return chillu != "";
     }
 }

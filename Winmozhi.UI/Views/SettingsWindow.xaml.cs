@@ -1,3 +1,4 @@
+using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Winmozhi.UI.ViewModels;
 
@@ -9,10 +10,11 @@ public sealed partial class SettingsWindow : Window
 
     public SettingsWindow(SettingsViewModel viewModel)
     {
-        this.InitializeComponent();
         ViewModel = viewModel;
 
-        AppWindow.Resize(new Windows.Graphics.SizeInt32(500, 600));
+        this.InitializeComponent();
+
+        try { AppWindow.TitleBar.ExtendsContentIntoTitleBar = true; } catch { }
 
         AppWindow.Closing += (s, e) =>
         {
@@ -22,19 +24,23 @@ public sealed partial class SettingsWindow : Window
         };
     }
 
-    private void TrayIcon_DoubleTapped(object sender, RoutedEventArgs e)
-    {
-        ShowSettings();
-    }
+    private void TrayIcon_DoubleTapped(object sender, RoutedEventArgs e) => ShowSettings();
 
-    private void ShowSettings_Click(object sender, RoutedEventArgs e)
-    {
-        ShowSettings();
-    }
+    private void ShowSettings_Click(object sender, RoutedEventArgs e) => ShowSettings();
 
     private void ShowSettings()
     {
-        AppWindow.Show();
-        this.Activate();
+        this.DispatcherQueue.TryEnqueue(() =>
+        {
+            var displayArea = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Primary);
+            int width = 700;
+            int height = 550;
+            int x = (displayArea.WorkArea.Width - width) / 2;
+            int y = (displayArea.WorkArea.Height - height) / 2;
+
+            AppWindow.MoveAndResize(new Windows.Graphics.RectInt32(x, y, width, height));
+            AppWindow.Show();
+            this.Activate();
+        });
     }
 }

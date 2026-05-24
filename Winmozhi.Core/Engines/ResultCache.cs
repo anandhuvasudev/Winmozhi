@@ -1,12 +1,11 @@
+using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace Winmozhi.Core.Engines;
 
-/// <summary>
-/// Thread-safe cache for transliteration results with automatic expiration.
-/// Reduces repeated API calls and improves responsiveness.
-/// </summary>
-public class ResultCache
+public class ResultCache(int maxEntries = 500, int expirationMinutes = 60)
 {
     private class CacheEntry
     {
@@ -15,18 +14,9 @@ public class ResultCache
     }
 
     private readonly ConcurrentDictionary<string, CacheEntry> _cache = new();
-    private readonly TimeSpan _expirationTime;
-    private readonly int _maxEntries;
+    private readonly TimeSpan _expirationTime = TimeSpan.FromMinutes(expirationMinutes);
+    private readonly int _maxEntries = maxEntries;
 
-    public ResultCache(int maxEntries = 500, int expirationMinutes = 60)
-    {
-        _maxEntries = maxEntries;
-        _expirationTime = TimeSpan.FromMinutes(expirationMinutes);
-    }
-
-    /// <summary>
-    /// Try to get cached results for a manglish text.
-    /// </summary>
     public bool TryGet(string manglishText, out List<string> results)
     {
         if (string.IsNullOrWhiteSpace(manglishText))
@@ -37,15 +27,13 @@ public class ResultCache
 
         if (_cache.TryGetValue(manglishText.ToLowerInvariant(), out var entry))
         {
-            // Check if entry has expired
             if (DateTime.UtcNow < entry.ExpiresAt)
             {
-                results = new List<string>(entry.Results);
+                results = [.. entry.Results];
                 return true;
             }
             else
             {
-                // Remove expired entry
                 _cache.TryRemove(manglishText.ToLowerInvariant(), out _);
             }
         }
@@ -54,55 +42,35 @@ public class ResultCache
         return false;
     }
 
-    /// <summary>
-    /// Store results in cache.
-    /// </summary>
     public void Set(string manglishText, List<string> results)
     {
-        if (string.IsNullOrWhiteSpace(manglishText) || results == null)
-            return;
-
-        // Don't cache empty results (allows retry)
-        if (results.Count == 0)
+        if (string.IsNullOrWhiteSpace(manglishText) || results == null || results.Count == 0)
             return;
 
         string key = manglishText.ToLowerInvariant();
 
-        // If cache is getting too large, clear old entries
         if (_cache.Count >= _maxEntries)
         {
             ClearExpiredEntries();
-            if (_cache.Count >= _maxEntries * 0.9) // If still over 90% capacity
+            if (_cache.Count >= _maxEntries * 0.9)
             {
-                _cache.Clear(); // Reset cache
+                _cache.Clear();
             }
         }
 
         _cache[key] = new CacheEntry
         {
-            Results = new List<string>(results),
+            Results = [.. results],
             ExpiresAt = DateTime.UtcNow.Add(_expirationTime)
         };
     }
 
-    /// <summary>
-    /// Clear all cached results.
-    /// </summary>
-    public void Clear()
-    {
-        _cache.Clear();
-    }
+    public void Clear() => _cache.Clear();
 
-    /// <summary>
-    /// Remove expired entries from cache.
-    /// </summary>
     private void ClearExpiredEntries()
     {
         var now = DateTime.UtcNow;
-        var expiredKeys = _cache
-            .Where(x => x.Value.ExpiresAt < now)
-            .Select(x => x.Key)
-            .ToList();
+        var expiredKeys = _cache.Where(x => x.Value.ExpiresAt < now).Select(x => x.Key).ToList();
 
         foreach (var key in expiredKeys)
         {
@@ -110,8 +78,5 @@ public class ResultCache
         }
     }
 
-    /// <summary>
-    /// Get current cache size.
-    /// </summary>
     public int Count => _cache.Count;
 }

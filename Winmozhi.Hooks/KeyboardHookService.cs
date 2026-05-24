@@ -151,20 +151,22 @@ public class KeyboardHookService : IKeyboardHookService
     {
         var inputs = new List<NativeMethods.INPUT>();
 
-        // STEP 1: Hold down the SHIFT key
-        inputs.Add(CreateKeyInput(0x10, false)); // VK_SHIFT = 0x10
-
-        // STEP 2: Send 'Left Arrow' rapidly to highlight the entire Manglish word
+        // STEP 1: Delete the Manglish word by sending backspace commands with spacing
+        // Add a small delay in the input sequence to ensure each backspace is processed
         for (int i = 0; i < backspaceCount; i++)
         {
-            inputs.Add(CreateKeyInput(0x25, false)); // VK_LEFT = 0x25 (Key Down)
-            inputs.Add(CreateKeyInput(0x25, true));  // VK_LEFT (Key Up)
+            inputs.Add(CreateKeyInput(0x08, false)); // VK_BACK = 0x08 (Key Down)
+            inputs.Add(CreateKeyInput(0x08, true));  // VK_BACK (Key Up)
         }
 
-        // STEP 3: Release the SHIFT key (Word is now fully highlighted)
-        inputs.Add(CreateKeyInput(0x10, true)); // VK_SHIFT Up
+        // Add a system pause - create several empty inputs to space out the backspaces
+        // This gives the target application time to process each backspace
+        for (int i = 0; i < 5; i++)
+        {
+            inputs.Add(CreateKeyInput(0, false)); // Empty key input as spacing
+        }
 
-        // STEP 4: Inject the Malayalam Unicode text (Instantly overwrites highlighted text)
+        // STEP 2: Inject the Malayalam Unicode text (Replaces the deleted Manglish)
         string fullText = malayalamWord + trailingText;
         foreach (char c in fullText)
         {
@@ -186,7 +188,7 @@ public class KeyboardHookService : IKeyboardHookService
             inputs.ToArray(),
             Marshal.SizeOf<NativeMethods.INPUT>());
 
-        // Step 5: Reset hook state cleanly
+        // Step 3: Reset hook state cleanly
         using (_wordLock.EnterScope())
         {
             _currentWord.Clear();

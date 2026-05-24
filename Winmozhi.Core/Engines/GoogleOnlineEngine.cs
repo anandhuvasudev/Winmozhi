@@ -4,15 +4,11 @@ using Winmozhi.Core.Interfaces;
 
 namespace Winmozhi.Core.Engines;
 
-/// <summary>
-/// Google Transliteration API engine with robust error handling, retries, timeout management, and caching.
-/// Optimized for production use with detailed diagnostics and performance optimization.
-/// </summary>
 public class GoogleOnlineEngine(HttpClient httpClient, ILogger<GoogleOnlineEngine> logger) : IOnlineEngine
 {
     private const string ApiUrl = "https://inputtools.google.com/request?text={0}&itc=ml-t-i0-und&num=5&cp=0&cs=1&ie=utf-8&oe=utf-8";
     private const int MaxRetries = 2;
-    private const int InitialTimeoutMs = 1500;  // Increased from 600ms to allow network handshake
+    private const int InitialTimeoutMs = 1500;
 
     private readonly ResultCache _cache = new(maxEntries: 1000, expirationMinutes: 120);
 
@@ -20,10 +16,9 @@ public class GoogleOnlineEngine(HttpClient httpClient, ILogger<GoogleOnlineEngin
     {
         if (string.IsNullOrWhiteSpace(manglishText)) return [];
 
-        // Check cache first - immediate response without network call
         if (_cache.TryGet(manglishText, out var cachedResults))
         {
-            logger.LogTrace("Cache hit for: {Text}", manglishText);
+            if (logger.IsEnabled(LogLevel.Trace)) logger.LogTrace("Cache hit for: {Text}", manglishText);
             return cachedResults;
         }
 
@@ -33,19 +28,17 @@ public class GoogleOnlineEngine(HttpClient httpClient, ILogger<GoogleOnlineEngin
             {
                 string url = string.Format(ApiUrl, Uri.EscapeDataString(manglishText));
 
-                // Create a timeout token that's longer than the cancellation token to allow full request
                 using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
                 timeoutCts.CancelAfter(TimeSpan.FromMilliseconds(InitialTimeoutMs));
 
-                // Send request with proper timeout handling
                 using var response = await httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, timeoutCts.Token);
 
                 if (!response.IsSuccessStatusCode)
                 {
-                    logger.LogDebug("Google API HTTP error {StatusCode} for: {Text}", response.StatusCode, manglishText);
+                    if (logger.IsEnabled(LogLevel.Debug)) logger.LogDebug("Google API HTTP error {StatusCode} for: {Text}", response.StatusCode, manglishText);
                     if (attempt < MaxRetries)
                     {
-                        await Task.Delay(100 * (attempt + 1), cancellationToken); // Exponential backoff
+                        await Task.Delay(100 * (attempt + 1), cancellationToken);
                         continue;
                     }
                     return [];
@@ -54,16 +47,14 @@ public class GoogleOnlineEngine(HttpClient httpClient, ILogger<GoogleOnlineEngin
                 await using var stream = await response.Content.ReadAsStreamAsync(timeoutCts.Token);
                 using var document = await JsonDocument.ParseAsync(stream, cancellationToken: timeoutCts.Token);
 
-                var result = ParseJsonResponse(document, manglishText);
-                if (result.Any())
+                var result = ParseJsonResponse(document);
+                if (result.Count > 0)
                 {
-                    // Cache successful results
                     _cache.Set(manglishText, result);
-                    logger.LogTrace("Google API returned {Count} suggestions for: {Text}", result.Count, manglishText);
+                    if (logger.IsEnabled(LogLevel.Trace)) logger.LogTrace("Google API returned {Count} suggestions for: {Text}", result.Count, manglishText);
                     return result;
                 }
 
-                // If parsing returned empty, retry
                 if (attempt < MaxRetries)
                 {
                     await Task.Delay(50 * (attempt + 1), cancellationToken);
@@ -74,19 +65,18 @@ public class GoogleOnlineEngine(HttpClient httpClient, ILogger<GoogleOnlineEngin
             }
             catch (OperationCanceledException)
             {
-                // Cancelled by debounce or timeout - expected during typing
                 if (attempt < MaxRetries && !cancellationToken.IsCancellationRequested)
                 {
-                    logger.LogTrace("Google API timeout on attempt {Attempt}, retrying for: {Text}", attempt + 1, manglishText);
+                    if (logger.IsEnabled(LogLevel.Trace)) logger.LogTrace("Google API timeout on attempt {Attempt}, retrying for: {Text}", attempt + 1, manglishText);
                     await Task.Delay(100, cancellationToken);
                     continue;
                 }
-                logger.LogTrace("Google API call cancelled for: {Text}", manglishText);
+                if (logger.IsEnabled(LogLevel.Trace)) logger.LogTrace("Google API call cancelled for: {Text}", manglishText);
                 return [];
             }
             catch (HttpRequestException ex)
             {
-                logger.LogDebug(ex, "HTTP error on attempt {Attempt} for: {Text}", attempt + 1, manglishText);
+                if (logger.IsEnabled(LogLevel.Debug)) logger.LogDebug(ex, "HTTP error on attempt {Attempt} for: {Text}", attempt + 1, manglishText);
                 if (attempt < MaxRetries)
                 {
                     await Task.Delay(100 * (attempt + 1), cancellationToken);
@@ -96,12 +86,12 @@ public class GoogleOnlineEngine(HttpClient httpClient, ILogger<GoogleOnlineEngin
             }
             catch (JsonException ex)
             {
-                logger.LogDebug(ex, "JSON parsing error for: {Text}", manglishText);
+                if (logger.IsEnabled(LogLevel.Debug)) logger.LogDebug(ex, "JSON parsing error for: {Text}", manglishText);
                 return [];
             }
             catch (Exception ex)
             {
-                logger.LogWarning(ex, "Unexpected error fetching suggestions for: {Text}", manglishText);
+                if (logger.IsEnabled(LogLevel.Warning)) logger.LogWarning(ex, "Unexpected error fetching suggestions for: {Text}", manglishText);
                 return [];
             }
         }
@@ -109,33 +99,24 @@ public class GoogleOnlineEngine(HttpClient httpClient, ILogger<GoogleOnlineEngin
         return [];
     }
 
-    private static List<string> ParseJsonResponse(JsonDocument document, string manglishText)
+    private static List<string> ParseJsonResponse(JsonDocument document)
     {
         try
         {
             var root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Array || root.GetArrayLength() < 2) return [];
 
-            // Verify response array structure
-            if (root.ValueKind != JsonValueKind.Array || root.GetArrayLength() < 2)
-                return [];
-
-            // Check if first element is "SUCCESS"
             var firstElement = root[0];
-            if (firstElement.ValueKind != JsonValueKind.String || firstElement.GetString() != "SUCCESS")
-                return [];
+            if (firstElement.ValueKind != JsonValueKind.String || firstElement.GetString() != "SUCCESS") return [];
 
-            // Navigate: root[1][0][1]
             var secondElement = root[1];
-            if (secondElement.ValueKind != JsonValueKind.Array || secondElement.GetArrayLength() == 0)
-                return [];
+            if (secondElement.ValueKind != JsonValueKind.Array || secondElement.GetArrayLength() == 0) return [];
 
             var firstResult = secondElement[0];
-            if (firstResult.ValueKind != JsonValueKind.Array || firstResult.GetArrayLength() < 2)
-                return [];
+            if (firstResult.ValueKind != JsonValueKind.Array || firstResult.GetArrayLength() < 2) return [];
 
             var transliterations = firstResult[1];
-            if (transliterations.ValueKind != JsonValueKind.Array)
-                return [];
+            if (transliterations.ValueKind != JsonValueKind.Array) return [];
 
             var results = new List<string>();
             foreach (var item in transliterations.EnumerateArray())

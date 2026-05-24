@@ -64,10 +64,14 @@ public class HybridTransliterationEngine(
     }
 
     /// <inheritdoc/>
+    // Inside HybridTransliterationEngine.cs
     public async Task<IEnumerable<string>> GetOnlineSuggestionsAsync(
         string manglishText, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(manglishText)) return [];
+
+        // FIX: Use our custom settings class instead of ApplicationData (which crashes unpackaged apps)
+        if (!Winmozhi.Core.Utilities.LocalPreferences.IsOnlineEngineEnabled) return [];
 
         try
         {
@@ -87,7 +91,6 @@ public class HybridTransliterationEngine(
         }
         catch (OperationCanceledException)
         {
-            // A new keystroke cancelled us, or the network timed out. Both are expected.
             logger.LogTrace("Online engine cancelled/timed out for: {Text}", manglishText);
             return [];
         }
@@ -97,4 +100,4 @@ public class HybridTransliterationEngine(
             return [];
         }
     }
-}
+    }
