@@ -1,6 +1,10 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Windowing;
+using H.NotifyIcon;
+using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using System;
 using System.Threading.Tasks;
 using Winmozhi.Core.Engines;
@@ -14,6 +18,7 @@ public partial class App : Microsoft.UI.Xaml.Application
     public IHost? Host { get; private set; }
     private Window? _popupWindow;
     private static Winmozhi.UI.Views.SettingsWindow? _settingsWindow;
+    private TaskbarIcon? _trayIcon;
 
     public App()
     {
@@ -64,6 +69,31 @@ public partial class App : Microsoft.UI.Xaml.Application
         if (_settingsWindow == null)
             _settingsWindow = Host.Services.GetRequiredService<Winmozhi.UI.Views.SettingsWindow>();
 
+        // Create and initialize taskbar tray icon (kept for the app lifetime)
+        try
+        {
+            _trayIcon = new TaskbarIcon()
+            {
+                ToolTipText = "Winmozhi Manglish Keyboard",
+                };
+
+            var menu = new MenuFlyout();
+
+            var openItem = new MenuFlyoutItem { Text = "Open Settings" };
+            openItem.Click += (s, e) => ShowSettingsFromTray();
+            menu.Items.Add(openItem);
+
+            menu.Items.Add(new MenuFlyoutSeparator());
+
+            var quitItem = new MenuFlyoutItem { Text = "Quit Winmozhi" };
+            quitItem.Click += (s, e) => Environment.Exit(0);
+            menu.Items.Add(quitItem);
+
+            _trayIcon.ContextFlyout = menu;
+            _trayIcon.DoubleTapped += (s, e) => ShowSettingsFromTray();
+        }
+        catch { /* best-effort, don't crash startup if tray fails */ }
+
         _settingsWindow.AppWindow.Show();
 
         _ = Task.Run(() =>
@@ -71,5 +101,25 @@ public partial class App : Microsoft.UI.Xaml.Application
             var offlineEngine = Host.Services.GetRequiredService<IOfflineEngine>();
             offlineEngine.LoadDictionary(CommonWordsDictionary.GetStarterWords());
         });
+    }
+
+    private void ShowSettingsFromTray()
+    {
+        try
+        {
+            _settingsWindow?.DispatcherQueue.TryEnqueue(() =>
+            {
+                var displayArea = DisplayArea.GetFromWindowId(_settingsWindow.AppWindow.Id, DisplayAreaFallback.Primary);
+                int width = 700;
+                int height = 550;
+                int x = (displayArea.WorkArea.Width - width) / 2;
+                int y = (displayArea.WorkArea.Height - height) / 2;
+
+                _settingsWindow.AppWindow.MoveAndResize(new Windows.Graphics.RectInt32(x, y, width, height));
+                _settingsWindow.AppWindow.Show();
+                _settingsWindow.Activate();
+            });
+        }
+        catch { }
     }
 }
