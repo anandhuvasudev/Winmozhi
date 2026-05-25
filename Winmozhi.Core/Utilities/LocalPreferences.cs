@@ -100,7 +100,6 @@ public static class LocalPreferences
         try
         {
             if (doc.RootElement.TryGetProperty(propertyName, out var element) && element.ValueKind == JsonValueKind.Number)
-            {
                 return element.GetInt32();
             }
         }
@@ -113,7 +112,6 @@ public static class LocalPreferences
         try
         {
             if (doc.RootElement.TryGetProperty(propertyName, out var element) && element.ValueKind == JsonValueKind.Number)
-            {
                 return element.GetDouble();
             }
         }
