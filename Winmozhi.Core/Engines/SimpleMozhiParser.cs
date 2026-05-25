@@ -1,9 +1,20 @@
-﻿using System.Text;
+﻿using System;
+using System.Text;
 
 namespace Winmozhi.Core.Engines;
 
 public static class SimpleMozhiParser
 {
+    // Caching arrays at the class level prevents massive memory allocations per keystroke!
+    private static readonly string[] Vowels = ["aa", "ee", "oo", "au", "ou", "ai", "ei", "ae", "oa", "am", "um", "ah", "a", "e", "i", "o", "u"];
+    private static readonly string[] Consonants = [
+        "ksh", "cch", "tth", "nth", "nch", "sth", "shh", "chh",
+        "kk", "gg", "ch", "jj", "tt", "dd", "nn", "th", "dh", "pp", "bb", "mm",
+        "yy", "rr", "ll", "vv", "sh", "ss", "hh", "zh",
+        "nj", "ng", "nk", "nd", "nt", "mb", "mp", "ph", "bh", "gh", "kh", "jh",
+        "k", "g", "c", "j", "t", "d", "n", "p", "f", "b", "m", "y", "r", "l", "v", "w", "s", "h", "z", "x", "q"
+    ];
+
     public static string Parse(string manglish)
     {
         if (string.IsNullOrWhiteSpace(manglish)) return string.Empty;
@@ -62,10 +73,9 @@ public static class SimpleMozhiParser
 
     private static string? MatchVowel(string text, int index)
     {
-        string[] vowels = ["aa", "ee", "oo", "au", "ou", "ai", "ei", "ae", "oa", "am", "um", "ah", "a", "e", "i", "o", "u"];
-        foreach (var v in vowels)
+        foreach (var v in Vowels)
         {
-            if (index + v.Length <= text.Length && text.Substring(index, v.Length) == v)
+            if (index + v.Length <= text.Length && text.AsSpan(index, v.Length).SequenceEqual(v.AsSpan()))
                 return v;
         }
         return null;
@@ -73,10 +83,9 @@ public static class SimpleMozhiParser
 
     private static string? MatchConsonant(string text, int index)
     {
-        string[] consonants = ["shh", "chh", "nth", "nch", "sth", "nd", "nj", "ng", "th", "dh", "ph", "bh", "sh", "ch", "jh", "gh", "kh", "zh", "kk", "mm", "nn", "ll", "rr", "tt", "pp", "k", "g", "c", "j", "t", "d", "n", "p", "f", "b", "m", "y", "r", "l", "v", "w", "s", "h", "z", "x", "q"];
-        foreach (var c in consonants)
+        foreach (var c in Consonants)
         {
-            if (index + c.Length <= text.Length && text.Substring(index, c.Length) == c)
+            if (index + c.Length <= text.Length && text.AsSpan(index, c.Length).SequenceEqual(c.AsSpan()))
                 return c;
         }
         return null;
@@ -128,66 +137,73 @@ public static class SimpleMozhiParser
 
     private static string GetConsonantBase(string c) => c switch
     {
-        "k" => "ക",
-        "kk" => "ക്ക",
-        "kh" => "ഖ",
-        "g" => "ഗ",
-        "gh" => "ഘ",
-        "ng" => "ങ",
-        "c" => "ച",
-        "ch" => "ച",
-        "chh" => "ഛ",
-        "j" => "ജ",
-        "jh" => "ഝ",
-        "nj" => "ഞ",
-        "nch" => "ഞ്ച",
-        "t" => "ട",
-        "tt" => "ട്ട",
-        "th" => "ത",
+        "ksh" => "ക്ഷ",
+        "cch" => "ച്ച",
+        "tth" => "ത്ത",
         "nth" => "ന്ത",
-        "d" => "ഡ",
-        "dh" => "ധ",
-        "nd" => "ണ്ട",
-        "n" => "ന",
+        "nch" => "ഞ്ച",
+        "sth" => "സ്ഥ",
+        "shh" => "ഷ",
+        "chh" => "ഛ",
+        "kk" => "ക്ക",
+        "gg" => "ഗ്ഗ",
+        "ch" => "ച",
+        "jj" => "ജ്ജ",
+        "tt" => "ട്ട",
+        "dd" => "ഡ്ഡ",
         "nn" => "ന്ന",
-        "p" => "പ",
+        "th" => "ത",
+        "dh" => "ധ",
         "pp" => "പ്പ",
+        "bb" => "ബ്ബ",
+        "mm" => "മ്മ",
+        "yy" => "യ്യ",
+        "rr" => "റ്റ",
+        "ll" => "ല്ല",
+        "vv" => "വ്വ",
+        "sh" => "ശ",
+        "ss" => "സ്സ",
+        "hh" => "ഹ്ന",
+        "zh" => "ഴ",
+        "nj" => "ഞ",
+        "ng" => "ങ",
+        "nk" => "ങ്ക",
+        "nd" => "ണ്ട",
+        "nt" => "ന്റ",
+        "mb" => "മ്പ",
+        "mp" => "മ്പ",
         "ph" => "ഫ",
+        "bh" => "ഭ",
+        "gh" => "ഘ",
+        "kh" => "ഖ",
+        "jh" => "ഝ",
+        "k" => "ക",
+        "g" => "ഗ",
+        "c" => "ച",
+        "j" => "ജ",
+        "t" => "ട",
+        "d" => "ഡ",
+        "n" => "ന",
+        "p" => "പ",
         "f" => "ഫ",
         "b" => "ബ",
-        "bh" => "ഭ",
         "m" => "മ",
-        "mm" => "മ്മ",
         "y" => "യ",
         "r" => "ര",
-        "rr" => "റ്റ",
         "l" => "ല",
-        "ll" => "ല്ല",
         "v" => "വ",
         "w" => "വ",
-        "sh" => "ശ",
-        "shh" => "ഷ",
         "s" => "സ",
         "h" => "ഹ",
-        "zh" => "ഴ",
         "z" => "സ",
         "x" => "ക്സ",
         "q" => "ക",
-        "sth" => "സ്ഥ",
         _ => "ക"
     };
 
     private static bool GetChillu(string c, out string chillu)
     {
-        chillu = c switch
-        {
-            "l" => "ൽ",
-            "n" => "ൻ",
-            "r" => "ർ",
-            "m" => "ം",
-            "ll" => "ൾ",
-            _ => ""
-        };
+        chillu = c switch { "l" => "ൽ", "n" => "ൻ", "r" => "ർ", "m" => "ം", "ll" => "ൾ", _ => "" };
         return chillu != "";
     }
 }

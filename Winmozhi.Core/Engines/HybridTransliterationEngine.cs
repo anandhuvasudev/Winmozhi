@@ -1,13 +1,11 @@
 ﻿#pragma warning disable CA1873
 using Microsoft.Extensions.Logging;
 using Winmozhi.Core.Interfaces;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace Winmozhi.Core.Engines;
 
-/// <summary>
-/// Hybrid transliteration engine combining history, offline dictionary, algorithmic fallback,
-/// and online (Google) suggestions. Results are merged intelligently with proper prioritization.
-/// </summary>
 public class HybridTransliterationEngine(
     IOfflineEngine offlineEngine,
     IOnlineEngine onlineEngine,
@@ -15,62 +13,43 @@ public class HybridTransliterationEngine(
     ILogger<HybridTransliterationEngine> logger) : ITransliterationEngine
 {
     private const int MaxSuggestions = 5;
-
-    // 2000ms timeout allows sufficient time for network requests including retries.
-    // Google API needs time for DNS lookup, connection establishment, and response.
-    // Debounce at 150ms ensures user doesn't see lag from this timeout.
     private const int OnlineTimeoutMs = 2000;
 
-    /// <inheritdoc/>
     public async Task<IEnumerable<string>> GetInstantSuggestionsAsync(
         string manglishText, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(manglishText)) return [];
 
-        // 1. History (User's prior choices) - HIGHEST PRIORITY
         var historyResults = await historyDatabase.GetUserSuggestionsAsync(manglishText).ConfigureAwait(false);
-
-        // 2. Offline Trie Engine (Exact dictionary matches)
         var offlineResults = offlineEngine.GetSuggestions(manglishText);
-
-        // 3. Algorithmic Fallback Engine (Guesses words mathematically)
         var algorithmicGuess = SimpleMozhiParser.Parse(manglishText);
 
-        // Combine intelligently: History > Offline > Algorithm
-        // Use LinkedHashSet-like behavior to preserve order and avoid duplicates
         var combined = new List<string>();
 
-        // Add history results first (most reliable user preferences)
         foreach (var word in historyResults)
-        {
             if (!combined.Contains(word, StringComparer.OrdinalIgnoreCase))
                 combined.Add(word);
-        }
 
-        // Add offline results (exact matches from dictionary)
         foreach (var word in offlineResults)
-        {
             if (!combined.Contains(word, StringComparer.OrdinalIgnoreCase))
                 combined.Add(word);
-        }
 
-        // Add algorithmic guess only if we don't already have good matches
         if (!string.IsNullOrEmpty(algorithmicGuess) && !combined.Contains(algorithmicGuess, StringComparer.OrdinalIgnoreCase))
-        {
             combined.Add(algorithmicGuess);
-        }
 
-        return combined.Take(MaxSuggestions);
+        var results = combined.Take(MaxSuggestions - 1).ToList();
+
+        // ALWAYS append the raw English text as the final option.
+        if (!results.Contains(manglishText.ToLowerInvariant(), StringComparer.OrdinalIgnoreCase))
+            results.Add(manglishText.ToLowerInvariant());
+
+        return results;
     }
 
-    /// <inheritdoc/>
-    // Inside HybridTransliterationEngine.cs
     public async Task<IEnumerable<string>> GetOnlineSuggestionsAsync(
         string manglishText, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(manglishText)) return [];
-
-        // FIX: Use our custom settings class instead of ApplicationData (which crashes unpackaged apps)
         if (!Winmozhi.Core.Utilities.LocalPreferences.IsOnlineEngineEnabled) return [];
 
         try
@@ -91,7 +70,6 @@ public class HybridTransliterationEngine(
         }
         catch (OperationCanceledException)
         {
-            logger.LogTrace("Online engine cancelled/timed out for: {Text}", manglishText);
             return [];
         }
         catch (Exception ex)
@@ -100,4 +78,4 @@ public class HybridTransliterationEngine(
             return [];
         }
     }
-    }
+}

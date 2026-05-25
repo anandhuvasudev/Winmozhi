@@ -21,6 +21,7 @@
 		<Nullable>enable</Nullable>
 		<PublishReadyToRun>true</PublishReadyToRun>
 		<TieredCompilation>true</TieredCompilation>
+		<ApplicationManifest>app.manifest</ApplicationManifest>
 	</PropertyGroup>
 	<ItemGroup>
 	  <None Remove="Views\PopupView.xaml" />

@@ -97,6 +97,7 @@ public static class CommonWordsDictionary
             { "pulli", ["പുല്ലി"] },
             { "makal", ["മകൾ"] },
             { "makan", ["മകൻ"] },
+            { "malayalam", ["മലയാളം"] },
             { "vendi", ["വെണ്ടി"] },
             { "vendippu", ["വെണ്ടിപ്പ"] },
             { "thazhvaram", ["താഴ്വരം"] },

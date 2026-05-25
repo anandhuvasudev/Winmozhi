@@ -8,7 +8,6 @@ public class GoogleOnlineEngine(HttpClient httpClient, ILogger<GoogleOnlineEngin
 {
     private const string ApiUrl = "https://inputtools.google.com/request?text={0}&itc=ml-t-i0-und&num=5&cp=0&cs=1&ie=utf-8&oe=utf-8";
     private const int MaxRetries = 2;
-    private const int InitialTimeoutMs = 1500;
 
     private readonly ResultCache _cache = new(maxEntries: 1000, expirationMinutes: 120);
 
@@ -28,10 +27,7 @@ public class GoogleOnlineEngine(HttpClient httpClient, ILogger<GoogleOnlineEngin
             {
                 string url = string.Format(ApiUrl, Uri.EscapeDataString(manglishText));
 
-                using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                timeoutCts.CancelAfter(TimeSpan.FromMilliseconds(InitialTimeoutMs));
-
-                using var response = await httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, timeoutCts.Token);
+                using var response = await httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
 
                 if (!response.IsSuccessStatusCode)
                 {
@@ -44,8 +40,8 @@ public class GoogleOnlineEngine(HttpClient httpClient, ILogger<GoogleOnlineEngin
                     return [];
                 }
 
-                await using var stream = await response.Content.ReadAsStreamAsync(timeoutCts.Token);
-                using var document = await JsonDocument.ParseAsync(stream, cancellationToken: timeoutCts.Token);
+                await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+                using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
 
                 var result = ParseJsonResponse(document);
                 if (result.Count > 0)

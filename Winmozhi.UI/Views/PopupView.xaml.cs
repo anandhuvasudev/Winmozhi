@@ -1,3 +1,4 @@
+#pragma warning disable CA1822
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -44,21 +45,16 @@ public sealed partial class PopupView : Window
 
         MakeWindowTruePopup(_hwnd);
 
-        // Apply native Windows 11 perfect rounded corners to the popup Window itself
         int cornerPreference = DWMWCP_ROUND;
         DwmSetWindowAttribute(_hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, ref cornerPreference, 4);
 
         AppWindow.Resize(new Windows.Graphics.SizeInt32(180, 260));
 
-        // Apply stored styling preferences
         ApplyStoredStyles();
-
         ViewModel.PropertyChanged += ViewModel_PropertyChanged;
 
-        // Subscribe to preference changes so the popup updates immediately when settings change
-        Winmozhi.Core.Utilities.LocalPreferences.PreferencesChanged += () =>
+        LocalPreferences.PreferencesChanged += () =>
         {
-            // Re-apply stored styles on UI thread
             this.DispatcherQueue.TryEnqueue(() => ApplyStoredStyles());
         };
     }
@@ -70,92 +66,60 @@ public sealed partial class PopupView : Window
             var grid = this.Content as Grid;
             if (grid?.Children.Count > 0 && grid.Children[0] is Border border)
             {
-                // Ensure opacity alters the glass background alpha, NOT the text!
-                double opacity = LocalPreferences.PopupOpacity;
-                if (opacity < 0.1) opacity = 0.1;
-                if (opacity > 1.0) opacity = 1.0;
-
+                double opacity = Math.Clamp(LocalPreferences.PopupOpacity, 0.1, 1.0);
                 byte alpha = (byte)(opacity * 255);
 
-                string bgColorHex = LocalPreferences.PopupBackgroundColor;
-                if (TryParseColor(bgColorHex, out var bgColor))
-                {
+                if (TryParseColor(LocalPreferences.PopupBackgroundColor, out var bgColor))
                     border.Background = new SolidColorBrush(Windows.UI.Color.FromArgb(alpha, bgColor.R, bgColor.G, bgColor.B));
-                }
                 else
-                {
-                    border.Background = new SolidColorBrush(Windows.UI.Color.FromArgb(alpha, 26, 26, 26)); // Dark default
-                }
+                    border.Background = new SolidColorBrush(Windows.UI.Color.FromArgb(alpha, 26, 26, 26));
 
-                // Keep border itself at 1.0 so text inside doesn't become transparent
                 border.Opacity = 1.0;
 
-                // Apply Text styling
-                string textColorHex = LocalPreferences.PopupTextColor;
-                if (TryParseColor(textColorHex, out var textColor))
-                {
+                if (TryParseColor(LocalPreferences.PopupTextColor, out var textColor))
                     CurrentManglishText.Foreground = new SolidColorBrush(textColor);
-                }
                 else
-                {
                     CurrentManglishText.Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 255, 255, 255));
-                }
 
                 double fontSize = LocalPreferences.PopupFontSize;
-                if (fontSize >= 10 && fontSize <= 32)
-                {
-                    CurrentManglishText.FontSize = fontSize - 4; // Subtext is slightly smaller
-                }
+                if (fontSize >= 10 && fontSize <= 32) CurrentManglishText.FontSize = fontSize - 4;
             }
         }
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine($"Error applying styles: {ex.Message}");
-        }
+        catch { }
     }
 
-    // Handles dynamically assigning text color/font size to ListItems cleanly
-    private void SuggestionsListView_ContainerContentChanging(ListViewBase sender, ContainerContentChangingEventArgs args)
+    private void SuggestionsListView_ContainerContentChanging(ListViewBase _, ContainerContentChangingEventArgs args)
     {
         if (args.ItemContainer.ContentTemplateRoot is TextBlock textBlock)
         {
             if (TryParseColor(LocalPreferences.PopupTextColor, out var color))
-            {
                 textBlock.Foreground = new SolidColorBrush(color);
-            }
             textBlock.FontSize = LocalPreferences.PopupFontSize;
         }
     }
 
     private static bool TryParseColor(string hexColor, out Windows.UI.Color color)
     {
-        color = Windows.UI.Color.FromArgb(255, 255, 255, 255);  // Default to white
+        color = Windows.UI.Color.FromArgb(255, 255, 255, 255);
         try
         {
             if (string.IsNullOrWhiteSpace(hexColor)) return false;
-
             hexColor = hexColor.TrimStart('#');
             if (hexColor.Length != 6 && hexColor.Length != 8) return false;
 
             uint hex = uint.Parse(hexColor, System.Globalization.NumberStyles.HexNumber);
 
             if (hexColor.Length == 6)
-            {
                 color = Windows.UI.Color.FromArgb(255, (byte)((hex >> 16) & 0xFF), (byte)((hex >> 8) & 0xFF), (byte)(hex & 0xFF));
-            }
             else
-            {
                 color = Windows.UI.Color.FromArgb((byte)((hex >> 24) & 0xFF), (byte)((hex >> 16) & 0xFF), (byte)((hex >> 8) & 0xFF), (byte)(hex & 0xFF));
-            }
+
             return true;
         }
-        catch
-        {
-            return false;
-        }
+        catch { return false; }
     }
 
-    private void ViewModel_PropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    private void ViewModel_PropertyChanged(object? _, System.ComponentModel.PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(ViewModel.IsVisible))
         {
@@ -170,8 +134,8 @@ public sealed partial class PopupView : Window
                     y = mousePos.Y;
                 }
 
-                int screenH = GetSystemMetrics(1); // SM_CYSCREEN
-                int screenW = GetSystemMetrics(0); // SM_CXSCREEN
+                int screenH = GetSystemMetrics(1);
+                int screenW = GetSystemMetrics(0);
 
                 int popupWidth = 180;
                 int popupHeight = 260;
@@ -184,12 +148,12 @@ public sealed partial class PopupView : Window
                 if (finalY < 0) finalY = 10;
                 if (finalX < 0) finalX = 10;
 
-                ShowWindow(_hwnd, SW_SHOWNOACTIVATE);
-                SetWindowPos(_hwnd, HWND_TOPMOST, finalX, finalY, 0, 0, SWP_NOSIZE | SWP_NOACTIVATE);
+                SetWindowPos(_hwnd, HWND_TOPMOST, finalX, finalY, popupWidth, popupHeight, SWP_NOACTIVATE | SWP_SHOWWINDOW);
             }
             else
             {
-                AppWindow.Hide();
+                // Fix: Move off-screen instead of AppWindow.Hide() to prevent compositor sleep bug
+                SetWindowPos(_hwnd, IntPtr.Zero, -10000, -10000, 0, 0, SWP_NOACTIVATE | SWP_NOSIZE | SWP_NOZORDER);
             }
         }
     }
@@ -199,16 +163,16 @@ public sealed partial class PopupView : Window
     const uint WS_POPUP = 0x80000000;
     const uint WS_EX_NOACTIVATE = 0x08000000;
     const uint WS_EX_TOOLWINDOW = 0x00000080;
-    const int SW_SHOWNOACTIVATE = 4;
     static readonly IntPtr HWND_TOPMOST = new(-1);
     const uint SWP_NOSIZE = 0x0001;
+    const uint SWP_NOZORDER = 0x0004;
     const uint SWP_NOACTIVATE = 0x0010;
+    const uint SWP_SHOWWINDOW = 0x0040; // Crucial to force UI wake!
 
-    // DWM API for perfect native rounded corners
     [LibraryImport("dwmapi.dll")]
     private static partial int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
     private const int DWMWA_WINDOW_CORNER_PREFERENCE = 33;
-    private const int DWMWCP_ROUND = 2; // Perfect 8px Win11 radius
+    private const int DWMWCP_ROUND = 2;
 
     [LibraryImport("user32.dll", SetLastError = true)]
     private static partial int GetWindowLongW(IntPtr hWnd, int nIndex);
@@ -219,10 +183,6 @@ public sealed partial class PopupView : Window
     [LibraryImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static partial bool GetCursorPos(out InteropPoint lpPoint);
-
-    [LibraryImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static partial bool ShowWindow(IntPtr hWnd, int nCmdShow);
 
     [LibraryImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]

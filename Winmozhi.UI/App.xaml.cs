@@ -13,8 +13,6 @@ public partial class App : Microsoft.UI.Xaml.Application
 {
     public IHost? Host { get; private set; }
     private Window? _popupWindow;
-
-    // Keep a static reference to the settings window so it persists across activations
     private static Winmozhi.UI.Views.SettingsWindow? _settingsWindow;
 
     public App()
@@ -40,7 +38,7 @@ public partial class App : Microsoft.UI.Xaml.Application
                 services.AddSingleton<IKeyboardHookService, Winmozhi.Hooks.KeyboardHookService>();
                 services.AddSingleton<IHistoryDatabase, SqliteHistoryDatabase>();
 
-                services.AddTransient<Winmozhi.UI.ViewModels.PopupViewModel>();
+                services.AddSingleton<Winmozhi.UI.ViewModels.PopupViewModel>();
                 services.AddSingleton<Winmozhi.UI.Views.PopupView>();
 
                 services.AddTransient<Winmozhi.UI.ViewModels.SettingsViewModel>();
@@ -54,18 +52,20 @@ public partial class App : Microsoft.UI.Xaml.Application
         LocalPreferences.Load();
         await Host!.StartAsync();
 
+        var hookService = Host.Services.GetRequiredService<IKeyboardHookService>();
+        hookService.StartHook();
+
         _popupWindow = Host.Services.GetRequiredService<Winmozhi.UI.Views.PopupView>();
 
-        // Create or reuse the settings window
-        if (_settingsWindow == null)
-        {
-            _settingsWindow = Host.Services.GetRequiredService<Winmozhi.UI.Views.SettingsWindow>();
-        }
+        // Fix: Force WinUI to build the swapchain off-screen to avoid the invisible window bug
+        _popupWindow.AppWindow.Move(new Windows.Graphics.PointInt32(-10000, -10000));
+        _popupWindow.AppWindow.Show();
 
-        // Show the settings window on launch
+        if (_settingsWindow == null)
+            _settingsWindow = Host.Services.GetRequiredService<Winmozhi.UI.Views.SettingsWindow>();
+
         _settingsWindow.AppWindow.Show();
 
-        // Load dictionary on background thread
         _ = Task.Run(() =>
         {
             var offlineEngine = Host.Services.GetRequiredService<IOfflineEngine>();

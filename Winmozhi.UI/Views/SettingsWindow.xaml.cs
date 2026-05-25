@@ -11,16 +11,9 @@ public sealed partial class SettingsWindow : Window
     public SettingsWindow(SettingsViewModel viewModel)
     {
         ViewModel = viewModel;
-
         this.InitializeComponent();
 
-        try
-        {
-            // FIX: Using the XAML Window API correctly themes the titlebar caption buttons (Close/Min/Max) 
-            // automatically to match the System Backdrop (Light/Dark themes) instead of forcing them black.
-            this.ExtendsContentIntoTitleBar = true;
-        }
-        catch { }
+        try { this.ExtendsContentIntoTitleBar = true; } catch { }
 
         AppWindow.Closing += (s, e) =>
         {
@@ -30,9 +23,10 @@ public sealed partial class SettingsWindow : Window
         };
     }
 
-    private void TrayIcon_DoubleTapped(object sender, RoutedEventArgs e) => ShowSettings();
+    // Fix IDE0060: Used '_' to indicate unused parameters
+    private void TrayIcon_DoubleTapped(object _, RoutedEventArgs _1) => ShowSettings();
 
-    private void ShowSettings_Click(object sender, RoutedEventArgs e) => ShowSettings();
+    private void ShowSettings_Click(object _, RoutedEventArgs _1) => ShowSettings();
 
     private void ShowSettings()
     {

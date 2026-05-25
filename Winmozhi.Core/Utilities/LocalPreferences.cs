@@ -12,13 +12,15 @@ public static class LocalPreferences
 
     // ── Feature Toggles ──────────────────────────────────────────────────────
     public static bool IsHookEnabled { get; set; } = true;
-    public static bool IsOnlineEngineEnabled { get; set; } = true;
+    public static bool IsOnlineEngineEnabled { get; set; } = false;  // Disabled by default to avoid network errors when offline
+    public static bool IsFmlFontModeEnabled { get; set; } = false;
+    public static bool IsMlFontModeEnabled { get; set; } = false;
 
     // ── Popup Styling ────────────────────────────────────────────────────────
-    public static string PopupBackgroundColor { get; set; } = "#1A1A1A";  // Dark background
-    public static string PopupTextColor { get; set; } = "#FFFFFF";       // White text
-    public static int PopupFontSize { get; set; } = 18;                  // Default font size
-    public static double PopupOpacity { get; set; } = 0.95;              // Slight transparency
+    public static string PopupBackgroundColor { get; set; } = GetSystemAccentColorHex();
+    public static string PopupTextColor { get; set; } = "#FFFFFF";
+    public static int PopupFontSize { get; set; } = 18;
+    public static double PopupOpacity { get; set; } = 0.90;
 
     public static void Load()
     {
@@ -31,11 +33,13 @@ public static class LocalPreferences
 
                 IsHookEnabled = GetBoolProperty(doc, nameof(IsHookEnabled), true);
                 IsOnlineEngineEnabled = GetBoolProperty(doc, nameof(IsOnlineEngineEnabled), true);
+                IsFmlFontModeEnabled = GetBoolProperty(doc, nameof(IsFmlFontModeEnabled), false);
+                IsMlFontModeEnabled = GetBoolProperty(doc, nameof(IsMlFontModeEnabled), false);
 
-                PopupBackgroundColor = GetStringProperty(doc, nameof(PopupBackgroundColor), "#1A1A1A");
+                PopupBackgroundColor = GetStringProperty(doc, nameof(PopupBackgroundColor), GetSystemAccentColorHex());
                 PopupTextColor = GetStringProperty(doc, nameof(PopupTextColor), "#FFFFFF");
                 PopupFontSize = GetIntProperty(doc, nameof(PopupFontSize), 18);
-                PopupOpacity = GetDoubleProperty(doc, nameof(PopupOpacity), 0.95);
+                PopupOpacity = GetDoubleProperty(doc, nameof(PopupOpacity), 0.90);
             }
         }
         catch { /* Fallback to defaults */ }
@@ -54,6 +58,8 @@ public static class LocalPreferences
             {
                 IsHookEnabled,
                 IsOnlineEngineEnabled,
+                IsFmlFontModeEnabled,
+                IsMlFontModeEnabled,
                 PopupBackgroundColor,
                 PopupTextColor,
                 PopupFontSize,
@@ -62,21 +68,30 @@ public static class LocalPreferences
             var json = JsonSerializer.Serialize(settings, _cachedOptions);
             File.WriteAllText(SettingsPath, json);
 
-            // Notify listeners that preferences have changed
             PreferencesChanged?.Invoke();
         }
         catch { }
     }
 
+    private static string GetSystemAccentColorHex()
+    {
+        try
+        {
+            var uiSettings = new Windows.UI.ViewManagement.UISettings();
+            var color = uiSettings.GetColorValue(Windows.UI.ViewManagement.UIColorType.Accent);
+            return $"#{color.R:X2}{color.G:X2}{color.B:X2}";
+        }
+        catch { return "#0078D7"; }
+    }
+
     // ── JSON Helper Methods ──────────────────────────────────────────────────
+
     private static bool GetBoolProperty(JsonDocument doc, string propertyName, bool defaultValue)
     {
         try
         {
-            if (doc.RootElement.TryGetProperty(propertyName, out var element) && element.ValueKind == JsonValueKind.True || element.ValueKind == JsonValueKind.False)
-            {
+            if (doc.RootElement.TryGetProperty(propertyName, out var element) && (element.ValueKind == JsonValueKind.True || element.ValueKind == JsonValueKind.False))
                 return element.GetBoolean();
-            }
         }
         catch { }
         return defaultValue;
@@ -87,9 +102,7 @@ public static class LocalPreferences
         try
         {
             if (doc.RootElement.TryGetProperty(propertyName, out var element) && element.ValueKind == JsonValueKind.String)
-            {
                 return element.GetString() ?? defaultValue;
-            }
         }
         catch { }
         return defaultValue;
@@ -101,7 +114,6 @@ public static class LocalPreferences
         {
             if (doc.RootElement.TryGetProperty(propertyName, out var element) && element.ValueKind == JsonValueKind.Number)
                 return element.GetInt32();
-            }
         }
         catch { }
         return defaultValue;
@@ -113,7 +125,6 @@ public static class LocalPreferences
         {
             if (doc.RootElement.TryGetProperty(propertyName, out var element) && element.ValueKind == JsonValueKind.Number)
                 return element.GetDouble();
-            }
         }
         catch { }
         return defaultValue;

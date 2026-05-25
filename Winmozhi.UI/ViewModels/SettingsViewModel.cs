@@ -2,6 +2,9 @@
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.Win32;
+using System;
+using System.IO;
 using System.Threading.Tasks;
 using Winmozhi.Core.Interfaces;
 using Winmozhi.Core.Utilities;
@@ -13,28 +16,25 @@ public partial class SettingsViewModel : ObservableObject
     private readonly IKeyboardHookService _hookService;
     private readonly IHistoryDatabase _historyDatabase;
 
-    [ObservableProperty]
-    public partial bool IsEnabled { get; set; }
+    [ObservableProperty] public partial bool IsEnabled { get; set; }
+    [ObservableProperty] public partial bool IsOnlineEngineEnabled { get; set; }
+    [ObservableProperty] public partial bool IsFmlFontModeEnabled { get; set; }
+    [ObservableProperty] public partial bool IsMlFontModeEnabled { get; set; }
+    [ObservableProperty] public partial string HistoryStatusMessage { get; set; } = string.Empty;
+    [ObservableProperty] public partial string PopupBackgroundColor { get; set; }
+    [ObservableProperty] public partial string PopupTextColor { get; set; }
+    [ObservableProperty] public partial int PopupFontSize { get; set; }
+    [ObservableProperty] public partial double PopupOpacity { get; set; }
 
-    [ObservableProperty]
-    public partial bool IsOnlineEngineEnabled { get; set; }
-
-    [ObservableProperty]
-    public partial string HistoryStatusMessage { get; set; } = string.Empty;
-
-    [ObservableProperty]
-    public partial string PopupBackgroundColor { get; set; }
-
-    [ObservableProperty]
-    public partial string PopupTextColor { get; set; }
-
-    [ObservableProperty]
-    public partial int PopupFontSize { get; set; }
-
-    [ObservableProperty]
-    public partial double PopupOpacity { get; set; }
-
-    // ── Color Picker Conversions ──────────────────────────────────────────────────
+    public bool RunAtStartup
+    {
+        get => GetRunAtStartup();
+        set
+        {
+            SetRunAtStartup(value);
+            OnPropertyChanged(nameof(RunAtStartup));
+        }
+    }
 
     public Windows.UI.Color PopupBackgroundColorColor
     {
@@ -60,6 +60,8 @@ public partial class SettingsViewModel : ObservableObject
         LocalPreferences.Load();
         IsEnabled = LocalPreferences.IsHookEnabled;
         IsOnlineEngineEnabled = LocalPreferences.IsOnlineEngineEnabled;
+        IsFmlFontModeEnabled = LocalPreferences.IsFmlFontModeEnabled;
+        IsMlFontModeEnabled = LocalPreferences.IsMlFontModeEnabled;
         PopupBackgroundColor = LocalPreferences.PopupBackgroundColor;
         PopupTextColor = LocalPreferences.PopupTextColor;
         PopupFontSize = LocalPreferences.PopupFontSize;
@@ -76,39 +78,40 @@ public partial class SettingsViewModel : ObservableObject
         else _hookService.StopHook();
     }
 
-    partial void OnIsOnlineEngineEnabledChanged(bool value)
+    partial void OnIsOnlineEngineEnabledChanged(bool value) { LocalPreferences.IsOnlineEngineEnabled = value; LocalPreferences.Save(); }
+    partial void OnIsFmlFontModeEnabledChanged(bool value) { LocalPreferences.IsFmlFontModeEnabled = value; if (value && IsMlFontModeEnabled) IsMlFontModeEnabled = false; LocalPreferences.Save(); }
+    partial void OnIsMlFontModeEnabledChanged(bool value) { LocalPreferences.IsMlFontModeEnabled = value; if (value && IsFmlFontModeEnabled) IsFmlFontModeEnabled = false; LocalPreferences.Save(); }
+    partial void OnPopupBackgroundColorChanged(string value) { LocalPreferences.PopupBackgroundColor = value; LocalPreferences.Save(); OnPropertyChanged(nameof(PopupBackgroundColorColor)); OnPropertyChanged(nameof(PopupBackgroundColorBrush)); }
+    partial void OnPopupTextColorChanged(string value) { LocalPreferences.PopupTextColor = value; LocalPreferences.Save(); OnPropertyChanged(nameof(PopupTextColorColor)); OnPropertyChanged(nameof(PopupTextColorBrush)); }
+    partial void OnPopupFontSizeChanged(int value) { LocalPreferences.PopupFontSize = value; LocalPreferences.Save(); }
+    partial void OnPopupOpacityChanged(double value) { LocalPreferences.PopupOpacity = value; LocalPreferences.Save(); OnPropertyChanged(nameof(PopupOpacityPercentage)); }
+
+    private const string StartupKey = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Run";
+    private const string AppName = "Winmozhi";
+
+    private static bool GetRunAtStartup()
     {
-        LocalPreferences.IsOnlineEngineEnabled = value;
-        LocalPreferences.Save();
+        try
+        {
+            using var key = Registry.CurrentUser.OpenSubKey(StartupKey);
+            return key?.GetValue(AppName) != null;
+        }
+        catch { return false; }
     }
 
-    partial void OnPopupBackgroundColorChanged(string value)
+    private static void SetRunAtStartup(bool enable)
     {
-        LocalPreferences.PopupBackgroundColor = value;
-        LocalPreferences.Save();
-        OnPropertyChanged(nameof(PopupBackgroundColorColor));
-        OnPropertyChanged(nameof(PopupBackgroundColorBrush));
-    }
-
-    partial void OnPopupTextColorChanged(string value)
-    {
-        LocalPreferences.PopupTextColor = value;
-        LocalPreferences.Save();
-        OnPropertyChanged(nameof(PopupTextColorColor));
-        OnPropertyChanged(nameof(PopupTextColorBrush));
-    }
-
-    partial void OnPopupFontSizeChanged(int value)
-    {
-        LocalPreferences.PopupFontSize = value;
-        LocalPreferences.Save();
-    }
-
-    partial void OnPopupOpacityChanged(double value)
-    {
-        LocalPreferences.PopupOpacity = value;
-        LocalPreferences.Save();
-        OnPropertyChanged(nameof(PopupOpacityPercentage));
+        try
+        {
+            using var key = Registry.CurrentUser.OpenSubKey(StartupKey, true);
+            if (enable)
+            {
+                var exePath = Environment.ProcessPath;
+                if (!string.IsNullOrEmpty(exePath)) key?.SetValue(AppName, $"\"{exePath}\"");
+            }
+            else key?.DeleteValue(AppName, false);
+        }
+        catch { }
     }
 
     [RelayCommand]
@@ -127,27 +130,16 @@ public partial class SettingsViewModel : ObservableObject
         Application.Current.Exit();
     }
 
-    // ── Hex Parsers ───────────────────────────────────────────────────────────────
     private static Windows.UI.Color HexToColor(string hex, Windows.UI.Color fallback)
     {
         try
         {
             if (string.IsNullOrWhiteSpace(hex)) return fallback;
             hex = hex.TrimStart('#');
-            if (hex.Length == 6)
-            {
-                return Windows.UI.Color.FromArgb(255,
-                    byte.Parse(hex[..2], System.Globalization.NumberStyles.HexNumber),
-                    byte.Parse(hex[2..4], System.Globalization.NumberStyles.HexNumber),
-                    byte.Parse(hex[4..6], System.Globalization.NumberStyles.HexNumber));
-            }
+            if (hex.Length == 6) return Windows.UI.Color.FromArgb(255, byte.Parse(hex[..2], System.Globalization.NumberStyles.HexNumber), byte.Parse(hex[2..4], System.Globalization.NumberStyles.HexNumber), byte.Parse(hex[4..6], System.Globalization.NumberStyles.HexNumber));
         }
         catch { }
         return fallback;
     }
-
-    private static string ColorToHex(Windows.UI.Color color)
-    {
-        return $"#{color.R:X2}{color.G:X2}{color.B:X2}";
-    }
+    private static string ColorToHex(Windows.UI.Color color) => $"#{color.R:X2}{color.G:X2}{color.B:X2}";
 }

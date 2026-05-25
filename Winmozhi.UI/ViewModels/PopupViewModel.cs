@@ -3,7 +3,9 @@ using Microsoft.UI.Dispatching;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using Winmozhi.Core.Interfaces;
@@ -16,16 +18,11 @@ public partial class PopupViewModel : ObservableObject
     private readonly IKeyboardHookService _hookService;
     private readonly IHistoryDatabase _historyDatabase;
     private readonly DispatcherQueue _dispatcher;
-    private CancellationTokenSource? _cts;
+    private int _suggestionRequestVersion;
 
-    [ObservableProperty]
-    public partial string CurrentManglish { get; set; }
-
-    [ObservableProperty]
-    public partial bool IsVisible { get; set; }
-
-    [ObservableProperty]
-    public partial int SelectedIndex { get; set; }
+    [ObservableProperty] public partial string CurrentManglish { get; set; }
+    [ObservableProperty] public partial bool IsVisible { get; set; }
+    [ObservableProperty] public partial int SelectedIndex { get; set; }
 
     public ObservableCollection<string> Suggestions { get; } = [];
 
@@ -38,13 +35,8 @@ public partial class PopupViewModel : ObservableObject
         _hookService = hookService;
         _historyDatabase = historyDatabase;
 
-        // GetForCurrentThread() must be called on the UI thread.
-        // Throwing here is intentional: a null dispatcher would cause silent
-        // TryEnqueue failures that are extremely hard to diagnose.
         _dispatcher = DispatcherQueue.GetForCurrentThread()
-            ?? throw new InvalidOperationException(
-                $"{nameof(PopupViewModel)} must be constructed on the UI thread. " +
-                "Ensure it is resolved from the DI container inside OnLaunched.");
+            ?? throw new InvalidOperationException("ViewModel must be constructed on the UI thread.");
 
         CurrentManglish = string.Empty;
 
@@ -53,55 +45,20 @@ public partial class PopupViewModel : ObservableObject
         _hookService.OnSelectionChangedRequested += HookService_OnSelectionChangedRequested;
     }
 
-    // ── Suggestion Navigation ─────────────────────────────────────────────────────
-
     private void HookService_OnSelectionChangedRequested(object? sender, int direction)
     {
         _dispatcher.TryEnqueue(() =>
         {
             if (Suggestions.Count == 0) return;
-
-            // Calculate the new index
             int currentIndex = SelectedIndex;
-            if (currentIndex < 0 || currentIndex >= Suggestions.Count)
-                currentIndex = 0; // Reset if out of bounds
-
+            if (currentIndex < 0 || currentIndex >= Suggestions.Count) currentIndex = 0;
             int newIndex = currentIndex + direction;
 
-            // Wrap around: down from last goes to first, up from first goes to last
-            if (newIndex < 0) 
-                newIndex = Suggestions.Count - 1;
-            else if (newIndex >= Suggestions.Count) 
-                newIndex = 0;
-
-            // Always update to force UI refresh, even if same index (at boundaries)
+            if (newIndex < 0) newIndex = Suggestions.Count - 1;
+            else if (newIndex >= Suggestions.Count) newIndex = 0;
             SelectedIndex = newIndex;
         });
     }
-
-    // ── Word Typed — Two-Phase Progressive Loading ────────────────────────────────
-    //
-    // THE FIX FOR "Tab/Enter doesn't work":
-    //
-    // The original code awaited the full GetSuggestionsAsync (which includes the
-    // Google API call, up to 1500 ms) before showing the popup or setting
-    // IsPopupVisible = true.  If the user pressed Tab before that completed,
-    // IsPopupVisible was still false on the hook thread, so Tab fell through
-    // without triggering OnInsertRequested.
-    //
-    // The new design:
-    //   Phase 1 — After the 150 ms debounce, fetch history + offline results.
-    //             These complete in < 5 ms. The popup appears and IsPopupVisible
-    //             is set to true within ~155 ms of the last keystroke.
-    //   Phase 2 — The Google API call runs concurrently. When it resolves, the
-    //             popup is updated with merged results without disturbing the
-    //             user's current selection.
-    //
-    // Because the popup is now visible (and IsPopupVisible = true) before the
-    // user can realistically press Tab, the hook intercepts Tab correctly and
-    // the replacement works.
-
-    // --- PopupViewModel.cs (Updated HookService_OnWordTyped method) ---
 
     private async void HookService_OnWordTyped(object? sender, string word)
     {
@@ -117,120 +74,141 @@ public partial class PopupViewModel : ObservableObject
             }
         });
 
-        if (string.IsNullOrWhiteSpace(word)) return;
+        if (string.IsNullOrWhiteSpace(word))
+        {
+            Interlocked.Increment(ref _suggestionRequestVersion);
+            return;
+        }
 
-        _cts?.Cancel();
-        _cts = new CancellationTokenSource();
-        var token = _cts.Token;
+        var requestVersion = Interlocked.Increment(ref _suggestionRequestVersion);
 
         try
         {
-            // 1. Fetch Instant Results (Memory / SQLite)
-            var instantResults = (await _engine.GetInstantSuggestionsAsync(word, token).ConfigureAwait(false)).ToList();
+            var instantResults = (await _engine.GetInstantSuggestionsAsync(word, CancellationToken.None).ConfigureAwait(false)).ToList();
+            if (requestVersion != _suggestionRequestVersion) return;
 
-            if (token.IsCancellationRequested) return;
-
-            // PUSH INSTANT RESULTS TO UI IMMEDIATELY
             _dispatcher.TryEnqueue(() =>
             {
-                if (token.IsCancellationRequested) return;
+                if (requestVersion != _suggestionRequestVersion) return;
                 ApplySuggestions(instantResults, preserveSelection: false);
             });
 
-            // 2. Wait a moment to ensure they stopped typing before calling Google
-            await Task.Delay(150, token).ConfigureAwait(false);
+            await Task.Delay(150).ConfigureAwait(false);
+            if (requestVersion != _suggestionRequestVersion) return;
 
-            var onlineResults = (await _engine.GetOnlineSuggestionsAsync(word, token).ConfigureAwait(false)).ToList();
-
-            if (token.IsCancellationRequested || onlineResults.Count == 0) return;
+            var onlineResults = (await _engine.GetOnlineSuggestionsAsync(word, CancellationToken.None).ConfigureAwait(false)).ToList();
+            if (requestVersion != _suggestionRequestVersion || onlineResults.Count == 0) return;
 
             var merged = MergeSuggestions(instantResults, onlineResults);
-
             _dispatcher.TryEnqueue(() =>
             {
-                if (token.IsCancellationRequested) return;
+                if (requestVersion != _suggestionRequestVersion) return;
                 ApplySuggestions(merged, preserveSelection: true);
             });
         }
         catch (OperationCanceledException) { }
     }
 
-    // ── Insert Requested (Tab / Space / Enter) ────────────────────────────────────
-
-    private void HookService_OnInsertRequested(object? sender, string trailingText)
+    private void HookService_OnInsertRequested(object? _, string trailingText)
     {
+        string manglish = CurrentManglish;
+
         _dispatcher.TryEnqueue(() =>
         {
-            // Guard: if somehow the popup was dismissed between the key press and
-            // this lambda running, do nothing.
-            if (Suggestions.Count == 0
-                || SelectedIndex < 0
-                || SelectedIndex >= Suggestions.Count)
+            if (string.IsNullOrWhiteSpace(manglish))
             {
+                if (!string.IsNullOrEmpty(trailingText)) _hookService.ReplaceWord(0, string.Empty, trailingText);
                 return;
             }
 
-            var selectedWord = Suggestions[SelectedIndex];
-            var manglish = CurrentManglish;
+            string malayalamWord;
 
-            // Persist preference asynchronously. Fire-and-forget is intentional;
-            // a write failure must never block or crash the UI.
-            _ = _historyDatabase.UpdateWordFrequencyAsync(manglish, selectedWord);
+            if (SelectedIndex >= 0 && SelectedIndex < Suggestions.Count && CurrentManglish == manglish)
+            {
+                malayalamWord = Suggestions[SelectedIndex];
+            }
+            else
+            {
+                malayalamWord = Winmozhi.Core.Engines.SimpleMozhiParser.Parse(manglish);
+                if (string.IsNullOrWhiteSpace(malayalamWord)) malayalamWord = manglish;
+            }
 
-            // Replace the Manglish text in the active app with the Malayalam word
-            _hookService.ReplaceWord(manglish.Length, selectedWord, trailingText);
+            _ = _historyDatabase.UpdateWordFrequencyAsync(manglish, malayalamWord);
 
-            // Dismiss the popup immediately
+            bool fmlEnabled = Winmozhi.Core.Utilities.LocalPreferences.IsFmlFontModeEnabled;
+            bool mlEnabled = Winmozhi.Core.Utilities.LocalPreferences.IsMlFontModeEnabled;
+            string processName = GetForegroundProcessName();
+            bool isPhotoshop = processName.Contains("photoshop", StringComparison.OrdinalIgnoreCase);
+
+            if (fmlEnabled || (mlEnabled && isPhotoshop))
+                malayalamWord = Winmozhi.Core.Engines.FmlConverter.ConvertToFml(malayalamWord);
+            else if (mlEnabled)
+                malayalamWord = Winmozhi.Core.Engines.FmlConverter.ConvertToMl(malayalamWord);
+
+            _hookService.ReplaceWord(manglish.Length, malayalamWord, trailingText);
+
             Suggestions.Clear();
             IsVisible = false;
             _hookService.IsPopupVisible = false;
+            CurrentManglish = string.Empty;
 
-            // ---> NEW: FREE RAM WHEN POPUP CLOSES <---
             Winmozhi.Core.Utilities.MemoryOptimizer.TrimMemory();
         });
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────────────
-
-    /// <summary>
-    /// Merges instant (history + offline) and online (Google) lists.
-    /// History words always lead; Google fills the remaining slots up to 5.
-    /// </summary>
-    private static List<string> MergeSuggestions(
-        IList<string> instant, IList<string> online)
+    private static List<string> MergeSuggestions(List<string> instant, List<string> online)
     {
-        var result = new List<string>(instant);
+        string originalManglish = instant.Last();
+        var result = new List<string>();
+
+        if (instant.Count > 1) result.Add(instant[0]);
+
         foreach (var word in online)
         {
-            if (result.Count >= 5) break;
-            if (!result.Contains(word, StringComparer.OrdinalIgnoreCase))
-                result.Add(word);
+            if (result.Count >= 4) break;
+            if (!result.Contains(word, StringComparer.OrdinalIgnoreCase)) result.Add(word);
         }
+
+        if (!result.Contains(originalManglish, StringComparer.OrdinalIgnoreCase)) result.Add(originalManglish);
         return result;
     }
 
-    /// <summary>
-    /// Updates the Suggestions collection and popup visibility.
-    /// When <paramref name="preserveSelection"/> is true, attempts to keep the
-    /// currently highlighted item selected after a Google update.
-    /// </summary>
     private void ApplySuggestions(IList<string> suggestions, bool preserveSelection)
     {
-        string? highlighted = preserveSelection
-            && SelectedIndex >= 0
-            && SelectedIndex < Suggestions.Count
-            ? Suggestions[SelectedIndex]
-            : null;
+        string? highlighted = preserveSelection && SelectedIndex >= 0 && SelectedIndex < Suggestions.Count
+            ? Suggestions[SelectedIndex] : null;
 
         Suggestions.Clear();
         foreach (var s in suggestions) Suggestions.Add(s);
 
-        int restoredIndex = highlighted is not null
-            ? Suggestions.IndexOf(highlighted)
-            : -1;
-
+        int restoredIndex = highlighted is not null ? Suggestions.IndexOf(highlighted) : -1;
         SelectedIndex = restoredIndex >= 0 ? restoredIndex : 0;
         IsVisible = Suggestions.Count > 0;
         _hookService.IsPopupVisible = IsVisible;
     }
+
+    private static string GetForegroundProcessName()
+    {
+        try
+        {
+            IntPtr hwnd = GetForegroundWindow();
+            if (hwnd == IntPtr.Zero) return string.Empty;
+
+            _ = GetWindowThreadProcessId(hwnd, out uint processId);
+            if (processId == 0) return string.Empty;
+
+            using var process = Process.GetProcessById((int)processId);
+            return process.ProcessName ?? string.Empty;
+        }
+        catch
+        {
+            return string.Empty;
+        }
+    }
+
+    [LibraryImport("user32.dll")]
+    private static partial IntPtr GetForegroundWindow();
+
+    [LibraryImport("user32.dll")]
+    private static partial uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
 }
