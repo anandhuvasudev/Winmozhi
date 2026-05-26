@@ -242,10 +242,11 @@
                     </Border>
                 </StackPanel>
 
-                <!-- Help & About Section -->
+                <!-- Help & Updates Section -->
                 <StackPanel Spacing="4">
-                    <TextBlock Text="Help" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Margin="2,0,0,4"/>
-                    <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="8" Padding="16,14">
+                    <TextBlock Text="Help &amp; Updates" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Margin="2,0,0,4"/>
+
+                    <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="8,8,0,0" Padding="16,14">
                         <Grid ColumnSpacing="12">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto"/>
@@ -258,6 +259,22 @@
                                 <TextBlock Text="View the quick start guide and shortcuts." Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Margin="0,2,0,0" TextWrapping="Wrap"/>
                             </StackPanel>
                             <Button Grid.Column="2" Content="View Guide" Click="ShowHowToUse_Click" VerticalAlignment="Center"/>
+                        </Grid>
+                    </Border>
+
+                    <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1,0,1,1" CornerRadius="0,0,8,8" Padding="16,14">
+                        <Grid ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <FontIcon Glyph="&#xE895;" FontSize="18" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center"/>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="8,0,0,0">
+                                <TextBlock Text="Check for Updates" Style="{ThemeResource BodyTextBlockStyle}" FontWeight="SemiBold"/>
+                                <TextBlock x:Name="UpdateStatusText" Text="Keep your app up to date." Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Margin="0,2,0,0" TextWrapping="Wrap"/>
+                            </StackPanel>
+                            <Button x:Name="CheckUpdateButton" Grid.Column="2" Content="Check Now" Click="CheckUpdates_Click" VerticalAlignment="Center"/>
                         </Grid>
                     </Border>
                 </StackPanel>

@@ -117,4 +117,52 @@ public sealed partial class SettingsWindow : Window
 
         await dialog.ShowAsync();
     }
+
+    private async void CheckUpdates_Click(object sender, RoutedEventArgs e)
+    {
+        CheckUpdateButton.IsEnabled = false;
+        UpdateStatusText.Text = "Checking GitHub...";
+
+        var (updateAvailable, latestVersion, downloadUrl) = await Winmozhi.Core.Utilities.UpdateService.CheckForUpdatesAsync();
+
+        if (updateAvailable)
+        {
+            UpdateStatusText.Text = $"Version {latestVersion} is available!";
+            await PromptForUpdateAsync(latestVersion, downloadUrl);
+        }
+        else
+        {
+            UpdateStatusText.Text = "You are on the latest version.";
+        }
+
+        CheckUpdateButton.IsEnabled = true;
+    }
+
+    private async Task PromptForUpdateAsync(string latestVersion, string downloadUrl)
+    {
+        var dialog = new ContentDialog
+        {
+            Title = "Update Available!",
+            Content = $"Winmozhi {latestVersion} is available to download. Would you like to update now? The app will quickly restart.",
+            PrimaryButtonText = "Update Now",
+            CloseButtonText = "Later",
+            DefaultButton = ContentDialogButton.Primary,
+            XamlRoot = this.Content.XamlRoot,
+            Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(200, 30, 30, 30))
+        };
+
+        if (Application.Current.RequestedTheme == ApplicationTheme.Light)
+            dialog.Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(220, 245, 245, 245));
+
+        var result = await dialog.ShowAsync();
+
+        if (result == ContentDialogResult.Primary)
+        {
+            UpdateStatusText.Text = "Downloading and restarting...";
+            CheckUpdateButton.IsEnabled = false;
+
+            // This triggers the background script and forces the app to close
+            await Winmozhi.Core.Utilities.UpdateService.ApplyUpdateAsync(downloadUrl);
+        }
+    }
 }
