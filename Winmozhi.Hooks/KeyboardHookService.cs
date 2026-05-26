@@ -195,79 +195,39 @@ public class KeyboardHookService : IKeyboardHookService
     public void ReplaceWord(int backspaceCount, string malayalamWord, string trailingText = "")
     {
         string fullText = malayalamWord + trailingText;
-        var inputs = new List<NativeMethods.INPUT>(backspaceCount * 2 + (fullText.Length * 4) + 10);
+        var inputs = new List<NativeMethods.INPUT>(backspaceCount * 2 + (fullText.Length * 2));
 
+        // 1. Send Backspaces to delete the English characters
         for (int i = 0; i < backspaceCount; i++)
         {
             inputs.Add(CreateVirtualKeyInput(0x08, false));
             inputs.Add(CreateVirtualKeyInput(0x08, true));
         }
 
-        bool preferPaste = ShouldPreferPaste(fullText);
-        if (preferPaste && TrySetClipboardUnicodeText(fullText))
+        // 2. Safe, Direct Unicode Injection (NO CLIPBOARD HIJACKING)
+        foreach (char c in fullText)
         {
-            inputs.Add(CreateVirtualKeyInput(VK_CONTROL, false));
-            inputs.Add(CreateVirtualKeyInput(0x56, false));
-            inputs.Add(CreateVirtualKeyInput(0x56, true));
-            inputs.Add(CreateVirtualKeyInput(VK_CONTROL, true));
-        }
-        else
-        {
-            foreach (char c in fullText) AddCharInputs(inputs, c);
+            if (c == '\n')
+            {
+                inputs.Add(CreateVirtualKeyInput(0x0D, false));
+                inputs.Add(CreateVirtualKeyInput(0x0D, true));
+            }
+            else
+            {
+                inputs.Add(CreateUnicodeInput(c, false));
+                inputs.Add(CreateUnicodeInput(c, true));
+            }
         }
 
-        // Fixed Warning CA1806
-        if (inputs.Count > 0) _ = NativeMethods.SendInput((uint)inputs.Count, [.. inputs], Marshal.SizeOf<NativeMethods.INPUT>());
+        // 3. Dispatch to Windows Input stream
+        if (inputs.Count > 0)
+        {
+            _ = NativeMethods.SendInput((uint)inputs.Count, [.. inputs], Marshal.SizeOf<NativeMethods.INPUT>());
+        }
 
         using (_wordLock.EnterScope()) { _currentWord.Clear(); }
         _isPopupVisible = false;
         OnWordTyped?.Invoke(this, string.Empty);
-    }
-
-    private static void AddCharInputs(List<NativeMethods.INPUT> inputs, char c)
-    {
-        if (c == '\n')
-        {
-            inputs.Add(CreateVirtualKeyInput(0x0D, false));
-            inputs.Add(CreateVirtualKeyInput(0x0D, true));
-            return;
-        }
-        inputs.Add(CreateUnicodeInput(c, false));
-        inputs.Add(CreateUnicodeInput(c, true));
-    }
-
-    private static bool ShouldPreferPaste(string text)
-    {
-        if (string.IsNullOrEmpty(text)) return false;
-        foreach (char c in text) if (c >= '\u0D00' && c <= '\u0D7F') return false;
-        return true;
-    }
-
-    private static bool TrySetClipboardUnicodeText(string text)
-    {
-        if (!NativeMethods.OpenClipboard(IntPtr.Zero)) return false;
-        IntPtr hGlobal = IntPtr.Zero;
-        try
-        {
-            if (!NativeMethods.EmptyClipboard()) return false;
-            byte[] bytes = Encoding.Unicode.GetBytes(text + "\0");
-            hGlobal = NativeMethods.GlobalAlloc(NativeMethods.GMEM_MOVEABLE, (UIntPtr)bytes.Length);
-            if (hGlobal == IntPtr.Zero) return false;
-
-            IntPtr target = NativeMethods.GlobalLock(hGlobal);
-            if (target == IntPtr.Zero) return false;
-            try { Marshal.Copy(bytes, 0, target, bytes.Length); } finally { NativeMethods.GlobalUnlock(hGlobal); }
-
-            IntPtr result = NativeMethods.SetClipboardData(NativeMethods.CF_UNICODETEXT, hGlobal);
-            if (result == IntPtr.Zero) return false;
-            hGlobal = IntPtr.Zero;
-            return true;
-        }
-        finally
-        {
-            if (hGlobal != IntPtr.Zero) NativeMethods.GlobalFree(hGlobal);
-            NativeMethods.CloseClipboard();
-        }
     }
 
     public (double X, double Y) GetCaretPosition()

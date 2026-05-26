@@ -17,11 +17,12 @@ public class TrieOfflineEngine : IOfflineEngine
 
     public void LoadDictionary(IEnumerable<KeyValuePair<string, List<string>>> wordPairs)
     {
-        foreach (var pair in wordPairs)
+        // Fix 1: Deconstruct KeyValuePair into (key, suggestions)
+        foreach (var (key, suggestions) in wordPairs)
         {
-            string key = pair.Key.ToLowerInvariant();
-            Insert(key, pair.Value);
-            _flatDictionary.Add(new KeyValuePair<string, List<string>>(key, pair.Value));
+            string lowerKey = key.ToLowerInvariant();
+            Insert(lowerKey, suggestions);
+            _flatDictionary.Add(new KeyValuePair<string, List<string>>(lowerKey, suggestions));
         }
     }
 
@@ -73,15 +74,16 @@ public class TrieOfflineEngine : IOfflineEngine
             // We use a tuple list instead of LINQ to avoid massive memory allocations on every keystroke
             var candidates = new List<(int Distance, int LengthDiff, List<string> Suggestions)>();
 
-            foreach (var item in _flatDictionary)
+            // Fix 2: Deconstruct KeyValuePair into (key, suggestions)
+            foreach (var (key, suggestions) in _flatDictionary)
             {
-                if (string.IsNullOrEmpty(item.Key)) continue;
+                if (string.IsNullOrEmpty(key)) continue;
 
-                int dist = ComputeLevenshteinDistance(normalizedSearch.AsSpan(), NormalizeManglish(item.Key).AsSpan());
+                int dist = ComputeLevenshteinDistance(normalizedSearch.AsSpan(), NormalizeManglish(key).AsSpan());
 
                 if (dist <= 2)
                 {
-                    candidates.Add((dist, Math.Abs(item.Key.Length - searchKey.Length), item.Value));
+                    candidates.Add((dist, Math.Abs(key.Length - searchKey.Length), suggestions));
                 }
             }
 
@@ -93,9 +95,10 @@ public class TrieOfflineEngine : IOfflineEngine
                 return a.LengthDiff.CompareTo(b.LengthDiff);
             });
 
-            foreach (var match in candidates)
+            // Fix 3 (Line 96): Deconstruct Tuple into (_, _, suggestions) since Distance/LengthDiff are unused here
+            foreach (var (_, _, suggestions) in candidates)
             {
-                foreach (var sug in match.Suggestions)
+                foreach (var sug in suggestions)
                 {
                     if (!results.Contains(sug)) results.Add(sug);
                     if (results.Count >= 5) goto EndFuzzySearch; // Fast exit
