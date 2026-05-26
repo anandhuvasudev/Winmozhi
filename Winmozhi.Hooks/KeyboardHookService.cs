@@ -22,9 +22,10 @@ public class KeyboardHookService : IKeyboardHookService
     private const int VK_LWIN = 0x5B;
     private const int VK_RWIN = 0x5C;
     private const int VK_SHIFT = 0x10;
-    private const bool EnableInsertionDiagnostics = false;
+    private const int VK_M = 0x4D;
 
     private volatile bool _isPopupVisible;
+    private bool _isTransliterationEnabled = true;
 
     public bool IsPopupVisible
     {
@@ -32,9 +33,16 @@ public class KeyboardHookService : IKeyboardHookService
         set => _isPopupVisible = value;
     }
 
+    public bool IsTransliterationEnabled
+    {
+        get => _isTransliterationEnabled;
+        set => _isTransliterationEnabled = value;
+    }
+
     public event EventHandler<string>? OnWordTyped;
     public event EventHandler<string>? OnInsertRequested;
     public event EventHandler<int>? OnSelectionChangedRequested;
+    public event EventHandler<bool>? OnStateChanged;
 
     public KeyboardHookService()
     {
@@ -66,6 +74,8 @@ public class KeyboardHookService : IKeyboardHookService
 
     private IntPtr MouseHookCallback(int nCode, IntPtr wParam, IntPtr lParam)
     {
+        if (!IsTransliterationEnabled) return NativeMethods.CallNextHookEx(_mouseHookId, nCode, wParam, lParam);
+
         if (nCode >= 0 && (wParam == (IntPtr)NativeMethods.WM_LBUTTONDOWN || wParam == (IntPtr)NativeMethods.WM_RBUTTONDOWN || wParam == (IntPtr)NativeMethods.WM_MBUTTONDOWN))
         {
             string? wordSnapshot = null;
@@ -91,6 +101,22 @@ public class KeyboardHookService : IKeyboardHookService
         var kbdStruct = Marshal.PtrToStructure<NativeMethods.KBDLLHOOKSTRUCT>(lParam);
         var key = kbdStruct.vkCode;
 
+        bool isCtrlDown = (NativeMethods.GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
+        bool isShiftDown = (NativeMethods.GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
+
+        if (isCtrlDown && isShiftDown && key == VK_M)
+        {
+            IsTransliterationEnabled = !IsTransliterationEnabled;
+            OnStateChanged?.Invoke(this, IsTransliterationEnabled);
+
+            using (_wordLock.EnterScope()) { _currentWord.Clear(); }
+            _isPopupVisible = false;
+            OnWordTyped?.Invoke(this, string.Empty);
+            return (IntPtr)1;
+        }
+
+        if (!IsTransliterationEnabled) return NativeMethods.CallNextHookEx(_hookId, nCode, wParam, lParam);
+
         if ((kbdStruct.flags & 0x10) != 0 || IsSystemShortcutActive())
             return NativeMethods.CallNextHookEx(_hookId, nCode, wParam, lParam);
 
@@ -101,19 +127,19 @@ public class KeyboardHookService : IKeyboardHookService
         {
             switch (key)
             {
-                case 0x09: // Tab
+                case 0x09:
                     using (_wordLock.EnterScope()) { _currentWord.Clear(); }
                     _isPopupVisible = false;
                     OnInsertRequested?.Invoke(this, string.Empty);
                     OnWordTyped?.Invoke(this, string.Empty);
                     return (IntPtr)1;
-                case 0x20: // Space
+                case 0x20:
                     using (_wordLock.EnterScope()) { _currentWord.Clear(); }
                     _isPopupVisible = false;
                     OnInsertRequested?.Invoke(this, " ");
                     OnWordTyped?.Invoke(this, string.Empty);
                     return (IntPtr)1;
-                case 0x0D: // Enter
+                case 0x0D:
                     if (_isPopupVisible)
                     {
                         using (_wordLock.EnterScope()) { _currentWord.Clear(); }
@@ -123,10 +149,10 @@ public class KeyboardHookService : IKeyboardHookService
                         return (IntPtr)1;
                     }
                     break;
-                case 0x28: // Down Arrow
+                case 0x28:
                     if (_isPopupVisible) { OnSelectionChangedRequested?.Invoke(this, 1); return (IntPtr)1; }
                     break;
-                case 0x26: // Up Arrow
+                case 0x26:
                     if (_isPopupVisible) { OnSelectionChangedRequested?.Invoke(this, -1); return (IntPtr)1; }
                     break;
             }
@@ -178,10 +204,8 @@ public class KeyboardHookService : IKeyboardHookService
         }
 
         bool preferPaste = ShouldPreferPaste(fullText);
-        bool usedPaste = false;
         if (preferPaste && TrySetClipboardUnicodeText(fullText))
         {
-            usedPaste = true;
             inputs.Add(CreateVirtualKeyInput(VK_CONTROL, false));
             inputs.Add(CreateVirtualKeyInput(0x56, false));
             inputs.Add(CreateVirtualKeyInput(0x56, true));
@@ -192,16 +216,8 @@ public class KeyboardHookService : IKeyboardHookService
             foreach (char c in fullText) AddCharInputs(inputs, c);
         }
 
-        if (EnableInsertionDiagnostics)
-        {
-            System.Diagnostics.Debug.WriteLine($"[ReplaceWord] mode={(usedPaste ? "Paste" : "KeyInject")}, len={fullText.Length}, preferPaste={preferPaste}");
-        }
-
-        if (inputs.Count > 0)
-        {
-            uint itemsSent = NativeMethods.SendInput((uint)inputs.Count, [.. inputs], Marshal.SizeOf<NativeMethods.INPUT>());
-            if (itemsSent == 0) { System.Diagnostics.Debug.WriteLine("Native SendInput pipeline failed."); }
-        }
+        // Fixed Warning CA1806
+        if (inputs.Count > 0) _ = NativeMethods.SendInput((uint)inputs.Count, [.. inputs], Marshal.SizeOf<NativeMethods.INPUT>());
 
         using (_wordLock.EnterScope()) { _currentWord.Clear(); }
         _isPopupVisible = false;
@@ -216,7 +232,6 @@ public class KeyboardHookService : IKeyboardHookService
             inputs.Add(CreateVirtualKeyInput(0x0D, true));
             return;
         }
-
         inputs.Add(CreateUnicodeInput(c, false));
         inputs.Add(CreateUnicodeInput(c, true));
     }
@@ -224,43 +239,27 @@ public class KeyboardHookService : IKeyboardHookService
     private static bool ShouldPreferPaste(string text)
     {
         if (string.IsNullOrEmpty(text)) return false;
-
-        foreach (char c in text)
-        {
-            if (c >= '\u0D00' && c <= '\u0D7F') return false;
-        }
-
+        foreach (char c in text) if (c >= '\u0D00' && c <= '\u0D7F') return false;
         return true;
     }
 
     private static bool TrySetClipboardUnicodeText(string text)
     {
         if (!NativeMethods.OpenClipboard(IntPtr.Zero)) return false;
-
         IntPtr hGlobal = IntPtr.Zero;
         try
         {
             if (!NativeMethods.EmptyClipboard()) return false;
-
             byte[] bytes = Encoding.Unicode.GetBytes(text + "\0");
             hGlobal = NativeMethods.GlobalAlloc(NativeMethods.GMEM_MOVEABLE, (UIntPtr)bytes.Length);
             if (hGlobal == IntPtr.Zero) return false;
 
             IntPtr target = NativeMethods.GlobalLock(hGlobal);
             if (target == IntPtr.Zero) return false;
-
-            try
-            {
-                Marshal.Copy(bytes, 0, target, bytes.Length);
-            }
-            finally
-            {
-                NativeMethods.GlobalUnlock(hGlobal);
-            }
+            try { Marshal.Copy(bytes, 0, target, bytes.Length); } finally { NativeMethods.GlobalUnlock(hGlobal); }
 
             IntPtr result = NativeMethods.SetClipboardData(NativeMethods.CF_UNICODETEXT, hGlobal);
             if (result == IntPtr.Zero) return false;
-
             hGlobal = IntPtr.Zero;
             return true;
         }
@@ -275,7 +274,6 @@ public class KeyboardHookService : IKeyboardHookService
     {
         var hwnd = NativeMethods.GetForegroundWindow();
         if (hwnd == IntPtr.Zero) return (-1, -1);
-
         var threadId = NativeMethods.GetWindowThreadProcessId(hwnd, out _);
         var guiInfo = new NativeMethods.GUITHREADINFO { cbSize = Marshal.SizeOf<NativeMethods.GUITHREADINFO>() };
 
@@ -288,26 +286,31 @@ public class KeyboardHookService : IKeyboardHookService
         return (-1, -1);
     }
 
+    // Fixes CS0535
+    public string GetForegroundProcessName()
+    {
+        try
+        {
+            IntPtr hwnd = NativeMethods.GetForegroundWindow();
+            if (hwnd == IntPtr.Zero) return string.Empty;
+
+            _ = NativeMethods.GetWindowThreadProcessId(hwnd, out uint processId);
+            if (processId == 0) return string.Empty;
+
+            using var process = System.Diagnostics.Process.GetProcessById((int)processId);
+            return process.ProcessName ?? string.Empty;
+        }
+        catch
+        {
+            return string.Empty;
+        }
+    }
+
     private static bool IsSystemShortcutActive() => IsKeyDown(VK_CONTROL) || IsKeyDown(VK_MENU) || IsKeyDown(VK_LWIN) || IsKeyDown(VK_RWIN);
     private static bool IsKeyDown(int vKey) => (NativeMethods.GetAsyncKeyState(vKey) & 0x8000) != 0;
 
-    private static NativeMethods.INPUT CreateVirtualKeyInput(ushort vk, bool isKeyUp)
-    {
-        uint flags = isKeyUp ? NativeMethods.KEYEVENTF_KEYUP : 0;
-        return new NativeMethods.INPUT
-        {
-            type = NativeMethods.INPUT_KEYBOARD,
-            u = new NativeMethods.InputUnion
-            {
-                ki = new NativeMethods.KEYBDINPUT
-                {
-                    wVk = vk,
-                    wScan = 0,
-                    dwFlags = flags
-                }
-            }
-        };
-    }
+    private static NativeMethods.INPUT CreateVirtualKeyInput(ushort vk, bool isKeyUp) =>
+        new() { type = NativeMethods.INPUT_KEYBOARD, u = new NativeMethods.InputUnion { ki = new NativeMethods.KEYBDINPUT { wVk = vk, wScan = 0, dwFlags = isKeyUp ? NativeMethods.KEYEVENTF_KEYUP : 0 } } };
 
     private static NativeMethods.INPUT CreateUnicodeInput(char c, bool isKeyUp) =>
         new() { type = NativeMethods.INPUT_KEYBOARD, u = new NativeMethods.InputUnion { ki = new NativeMethods.KEYBDINPUT { wScan = c, dwFlags = NativeMethods.KEYEVENTF_UNICODE | (isKeyUp ? NativeMethods.KEYEVENTF_KEYUP : 0) } } };

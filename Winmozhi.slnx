@@ -2,14 +2,18 @@
   <Configurations>
     <Platform Name="x64" />
     <Platform Name="ARM64" />
-
   </Configurations>
-  <Project Path="Winmozhi.Core/Winmozhi.Core.csproj" />
-  <Project Path="Winmozhi.Hooks/Winmozhi.Hooks.csproj" />
+  <Project Path="Winmozhi.Core/Winmozhi.Core.csproj">
+    <Platform Solution="*|x64" Project="x64" />
+    <Platform Solution="*|ARM64" Project="ARM64" />
+  </Project>
+  <Project Path="Winmozhi.Hooks/Winmozhi.Hooks.csproj">
+    <Platform Solution="*|x64" Project="x64" />
+    <Platform Solution="*|ARM64" Project="ARM64" />
+  </Project>
   <Project Path="Winmozhi.UI/Winmozhi.UI.csproj">
-<Platform Solution="*|x64" Project="x64" />    
-<Platform Solution="*|ARM64" Project="ARM64" />
-    
+    <Platform Solution="*|x64" Project="x64" />
+    <Platform Solution="*|ARM64" Project="ARM64" />
     <Deploy />
   </Project>
 </Solution>

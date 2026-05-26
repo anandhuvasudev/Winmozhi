@@ -5,65 +5,68 @@ namespace Winmozhi.Core.Engines;
 
 public static class SimpleMozhiParser
 {
-    // Caching arrays at the class level prevents massive memory allocations per keystroke!
-    private static readonly string[] Vowels = ["aa", "ee", "oo", "au", "ou", "ai", "ei", "ae", "oa", "am", "um", "ah", "a", "e", "i", "o", "u"];
-    private static readonly string[] Consonants = [
-        "ksh", "cch", "tth", "nth", "nch", "sth", "shh", "chh",
-        "kk", "gg", "ch", "jj", "tt", "dd", "nn", "th", "dh", "pp", "bb", "mm",
-        "yy", "rr", "ll", "vv", "sh", "ss", "hh", "zh",
-        "nj", "ng", "nk", "nd", "nt", "mb", "mp", "ph", "bh", "gh", "kh", "jh",
-        "k", "g", "c", "j", "t", "d", "n", "p", "f", "b", "m", "y", "r", "l", "v", "w", "s", "h", "z", "x", "q"
-    ];
-
+    /// <summary>
+    /// Parses Manglish text into algorithmic Malayalam using high-performance 
+    /// zero-allocation span slicing and intelligent phonetic digraph rules.
+    /// </summary>
     public static string Parse(string manglish)
     {
         if (string.IsNullOrWhiteSpace(manglish)) return string.Empty;
 
-        manglish = manglish.ToLowerInvariant();
-        var sb = new StringBuilder();
+        var text = manglish.ToLowerInvariant().AsSpan();
+        var sb = new StringBuilder(text.Length * 2);
         bool lastWasConsonant = false;
 
         int i = 0;
-        while (i < manglish.Length)
+        while (i < text.Length)
         {
-            var vowelMatch = MatchVowel(manglish, i);
-            if (vowelMatch != null)
+            // 1. Check for Vowels
+            int vowelLen = TryMatchVowel(text[i..], out string indVowel, out string signVowel);
+            if (vowelLen > 0)
             {
                 if (lastWasConsonant)
                 {
+                    // Remove trailing virama (്) before adding a vowel sign
                     if (sb.Length > 0 && sb[^1] == '്') sb.Length--;
-                    sb.Append(GetVowelSign(vowelMatch));
+
+                    if (signVowel != "a_implied")
+                    {
+                        sb.Append(signVowel);
+                    }
                 }
                 else
                 {
-                    sb.Append(GetIndependentVowel(vowelMatch));
+                    sb.Append(indVowel);
                 }
                 lastWasConsonant = false;
-                i += vowelMatch.Length;
+                i += vowelLen;
                 continue;
             }
 
-            var consonantMatch = MatchConsonant(manglish, i);
-            if (consonantMatch != null)
+            // 2. Check for Consonants and Phonetic Clusters
+            int consLen = TryMatchConsonant(text[i..], out string baseConsonant, out string? chillu);
+            if (consLen > 0)
             {
-                bool isLastChar = (i + consonantMatch.Length == manglish.Length);
-                bool nextIsConsonant = !isLastChar && MatchVowel(manglish, i + consonantMatch.Length) == null;
+                bool isLastChar = (i + consLen == text.Length);
+                bool nextIsConsonant = !isLastChar && TryMatchVowel(text[(i + consLen)..], out _, out _) == 0;
 
-                if ((isLastChar || nextIsConsonant) && GetChillu(consonantMatch, out string chillu))
+                // Apply Chillu if it's the end of a word, or immediately followed by another consonant
+                if ((isLastChar || nextIsConsonant) && chillu != null)
                 {
                     sb.Append(chillu);
-                    lastWasConsonant = false;
+                    lastWasConsonant = false; // Chillu cannot accept a vowel sign
                 }
                 else
                 {
-                    sb.Append(GetConsonantBase(consonantMatch)).Append('്');
+                    sb.Append(baseConsonant).Append('്'); // Append base character + virama
                     lastWasConsonant = true;
                 }
-                i += consonantMatch.Length;
+                i += consLen;
                 continue;
             }
 
-            sb.Append(manglish[i]);
+            // 3. Unrecognized characters (Numbers, Punctuation, Spaces)
+            sb.Append(text[i]);
             lastWasConsonant = false;
             i++;
         }
@@ -71,139 +74,122 @@ public static class SimpleMozhiParser
         return sb.ToString();
     }
 
-    private static string? MatchVowel(string text, int index)
+    private static int TryMatchVowel(ReadOnlySpan<char> span, out string ind, out string sign)
     {
-        foreach (var v in Vowels)
+        ind = string.Empty;
+        sign = string.Empty;
+
+        if (span.Length >= 2)
         {
-            if (index + v.Length <= text.Length && text.AsSpan(index, v.Length).SequenceEqual(v.AsSpan()))
-                return v;
+            var two = span[..2];
+            if (two.SequenceEqual("aa")) { ind = "ആ"; sign = "ാ"; return 2; }
+            if (two.SequenceEqual("ee")) { ind = "ഈ"; sign = "ീ"; return 2; }
+            if (two.SequenceEqual("oo")) { ind = "ഊ"; sign = "ൂ"; return 2; }
+            if (two.SequenceEqual("au")) { ind = "ഔ"; sign = "ൌ"; return 2; }
+            if (two.SequenceEqual("ou")) { ind = "ഔ"; sign = "ൌ"; return 2; }
+            if (two.SequenceEqual("ai")) { ind = "ഐ"; sign = "ൈ"; return 2; }
+            if (two.SequenceEqual("ei")) { ind = "ഐ"; sign = "ൈ"; return 2; }
+            if (two.SequenceEqual("ae")) { ind = "ഏ"; sign = "േ"; return 2; }
+            if (two.SequenceEqual("oa")) { ind = "ഓ"; sign = "ോ"; return 2; }
+            if (two.SequenceEqual("am")) { ind = "അം"; sign = "ം"; return 2; }
+            if (two.SequenceEqual("um")) { ind = "ഉം"; sign = "ും"; return 2; }
+            if (two.SequenceEqual("ah")) { ind = "അഃ"; sign = "ഃ"; return 2; }
         }
-        return null;
+
+        char c = span[0];
+        switch (c)
+        {
+            case 'a': ind = "അ"; sign = "a_implied"; return 1; // 'a' kills virama but has no visual sign
+            case 'e': ind = "എ"; sign = "െ"; return 1;
+            case 'i': ind = "ഇ"; sign = "ി"; return 1;
+            case 'o': ind = "ഒ"; sign = "ൊ"; return 1;
+            case 'u': ind = "ഉ"; sign = "ു"; return 1;
+        }
+
+        return 0;
     }
 
-    private static string? MatchConsonant(string text, int index)
+    private static int TryMatchConsonant(ReadOnlySpan<char> span, out string baseConsonant, out string? chillu)
     {
-        foreach (var c in Consonants)
+        baseConsonant = string.Empty;
+        chillu = null;
+
+        // 3-Letter Complex Clusters
+        if (span.Length >= 3)
         {
-            if (index + c.Length <= text.Length && text.AsSpan(index, c.Length).SequenceEqual(c.AsSpan()))
-                return c;
+            var three = span[..3];
+            if (three.SequenceEqual("ksh")) { baseConsonant = "ക്ഷ"; return 3; }
+            if (three.SequenceEqual("nth")) { baseConsonant = "ന്ത"; return 3; }
+            if (three.SequenceEqual("nch")) { baseConsonant = "ഞ്ച"; return 3; }
+            if (three.SequenceEqual("shh")) { baseConsonant = "ഷ"; return 3; }
+            if (three.SequenceEqual("cch")) { baseConsonant = "ച്ച"; return 3; }
+            if (three.SequenceEqual("sth")) { baseConsonant = "സ്ഥ"; return 3; }
         }
-        return null;
-    }
 
-    private static string GetIndependentVowel(string v) => v switch
-    {
-        "a" => "അ",
-        "aa" => "ആ",
-        "i" => "ഇ",
-        "ee" => "ഈ",
-        "u" => "ഉ",
-        "oo" => "ഊ",
-        "e" => "എ",
-        "ae" => "ഏ",
-        "ai" => "ഐ",
-        "ei" => "ഐ",
-        "o" => "ഒ",
-        "oa" => "ഓ",
-        "au" => "ഔ",
-        "ou" => "ഔ",
-        "am" => "അം",
-        "um" => "ഉം",
-        "ah" => "അഃ",
-        _ => ""
-    };
+        // 2-Letter Digraphs & Malayalam Specialties
+        if (span.Length >= 2)
+        {
+            var two = span[..2];
 
-    private static string GetVowelSign(string v) => v switch
-    {
-        "a" => "",
-        "aa" => "ാ",
-        "i" => "ി",
-        "ee" => "ീ",
-        "u" => "ു",
-        "oo" => "ൂ",
-        "e" => "െ",
-        "ae" => "േ",
-        "ai" => "ൈ",
-        "ei" => "ൈ",
-        "o" => "ൊ",
-        "oa" => "ോ",
-        "au" => "ൌ",
-        "ou" => "ൌ",
-        "am" => "ം",
-        "um" => "ും",
-        "ah" => "ഃ",
-        _ => ""
-    };
+            // Nuanced Malayalam Clusters
+            if (two.SequenceEqual("nj")) { baseConsonant = "ഞ"; return 2; }
+            if (two.SequenceEqual("ng")) { baseConsonant = "ങ"; return 2; }
+            if (two.SequenceEqual("nk")) { baseConsonant = "ങ്ക"; return 2; }
+            if (two.SequenceEqual("nd")) { baseConsonant = "ണ്ട"; return 2; }
+            if (two.SequenceEqual("nt")) { baseConsonant = "ന്റ"; return 2; } // Handles standard "ente" -> എന്റെ
+            if (two.SequenceEqual("mb")) { baseConsonant = "മ്പ"; return 2; }
+            if (two.SequenceEqual("mp")) { baseConsonant = "മ്പ"; return 2; }
 
-    private static string GetConsonantBase(string c) => c switch
-    {
-        "ksh" => "ക്ഷ",
-        "cch" => "ച്ച",
-        "tth" => "ത്ത",
-        "nth" => "ന്ത",
-        "nch" => "ഞ്ച",
-        "sth" => "സ്ഥ",
-        "shh" => "ഷ",
-        "chh" => "ഛ",
-        "kk" => "ക്ക",
-        "gg" => "ഗ്ഗ",
-        "ch" => "ച",
-        "jj" => "ജ്ജ",
-        "tt" => "ട്ട",
-        "dd" => "ഡ്ഡ",
-        "nn" => "ന്ന",
-        "th" => "ത",
-        "dh" => "ധ",
-        "pp" => "പ്പ",
-        "bb" => "ബ്ബ",
-        "mm" => "മ്മ",
-        "yy" => "യ്യ",
-        "rr" => "റ്റ",
-        "ll" => "ല്ല",
-        "vv" => "വ്വ",
-        "sh" => "ശ",
-        "ss" => "സ്സ",
-        "hh" => "ഹ്ന",
-        "zh" => "ഴ",
-        "nj" => "ഞ",
-        "ng" => "ങ",
-        "nk" => "ങ്ക",
-        "nd" => "ണ്ട",
-        "nt" => "ന്റ",
-        "mb" => "മ്പ",
-        "mp" => "മ്പ",
-        "ph" => "ഫ",
-        "bh" => "ഭ",
-        "gh" => "ഘ",
-        "kh" => "ഖ",
-        "jh" => "ഝ",
-        "k" => "ക",
-        "g" => "ഗ",
-        "c" => "ച",
-        "j" => "ജ",
-        "t" => "ട",
-        "d" => "ഡ",
-        "n" => "ന",
-        "p" => "പ",
-        "f" => "ഫ",
-        "b" => "ബ",
-        "m" => "മ",
-        "y" => "യ",
-        "r" => "ര",
-        "l" => "ല",
-        "v" => "വ",
-        "w" => "വ",
-        "s" => "സ",
-        "h" => "ഹ",
-        "z" => "സ",
-        "x" => "ക്സ",
-        "q" => "ക",
-        _ => "ക"
-    };
+            // Standard Aspirated Consonants
+            if (two.SequenceEqual("ch")) { baseConsonant = "ച"; return 2; }
+            if (two.SequenceEqual("th")) { baseConsonant = "ത"; return 2; }
+            if (two.SequenceEqual("dh")) { baseConsonant = "ധ"; return 2; }
+            if (two.SequenceEqual("ph")) { baseConsonant = "ഫ"; return 2; }
+            if (two.SequenceEqual("bh")) { baseConsonant = "ഭ"; return 2; }
+            if (two.SequenceEqual("sh")) { baseConsonant = "ശ"; return 2; }
+            if (two.SequenceEqual("zh")) { baseConsonant = "ഴ"; return 2; }
+            if (two.SequenceEqual("kh")) { baseConsonant = "ഖ"; return 2; }
+            if (two.SequenceEqual("gh")) { baseConsonant = "ഘ"; return 2; }
+            if (two.SequenceEqual("jh")) { baseConsonant = "ഝ"; return 2; }
 
-    private static bool GetChillu(string c, out string chillu)
-    {
-        chillu = c switch { "l" => "ൽ", "n" => "ൻ", "r" => "ർ", "m" => "ം", "ll" => "ൾ", _ => "" };
-        return chillu != "";
+            // Double Consonants
+            if (two.SequenceEqual("ll")) { baseConsonant = "ല്ല"; chillu = "ൾ"; return 2; } // ll gracefully handles ൾ chillu
+            if (two.SequenceEqual("rr")) { baseConsonant = "റ്റ"; return 2; }
+            if (two.SequenceEqual("nn")) { baseConsonant = "ന്ന"; return 2; }
+            if (two.SequenceEqual("mm")) { baseConsonant = "മ്മ"; return 2; }
+            if (two.SequenceEqual("tt")) { baseConsonant = "ട്ട"; return 2; }
+            if (two.SequenceEqual("kk")) { baseConsonant = "ക്ക"; return 2; }
+            if (two.SequenceEqual("pp")) { baseConsonant = "പ്പ"; return 2; }
+        }
+
+        // 1-Letter Base Consonants
+        char c = span[0];
+        switch (c)
+        {
+            case 'k': baseConsonant = "ക"; break;
+            case 'g': baseConsonant = "ഗ"; break;
+            case 'c': baseConsonant = "ച"; break;
+            case 'j': baseConsonant = "ജ"; break;
+            case 't': baseConsonant = "ട"; break;
+            case 'd': baseConsonant = "ഡ"; break;
+            case 'n': baseConsonant = "ന"; chillu = "ൻ"; break; // Defaults to ൻ for context
+            case 'p': baseConsonant = "പ"; break;
+            case 'f': baseConsonant = "ഫ"; break;
+            case 'b': baseConsonant = "ബ"; break;
+            case 'm': baseConsonant = "മ"; chillu = "ം"; break; // Defaults to Anuswaram ം context
+            case 'y': baseConsonant = "യ"; break;
+            case 'r': baseConsonant = "ര"; chillu = "ർ"; break; // Defaults to ർ for context
+            case 'l': baseConsonant = "ല"; chillu = "ൽ"; break; // Defaults to ൽ for context
+            case 'v':
+            case 'w': baseConsonant = "വ"; break;
+            case 's': baseConsonant = "സ"; break;
+            case 'h': baseConsonant = "ഹ"; break;
+            case 'z': baseConsonant = "സ"; break;
+            case 'x': baseConsonant = "ക്സ"; break;
+            case 'q': baseConsonant = "ക്യു"; break; // Phonetic map for 'Q'
+            default: return 0;
+        }
+
+        return 1;
     }
 }

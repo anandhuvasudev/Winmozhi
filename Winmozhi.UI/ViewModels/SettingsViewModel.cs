@@ -26,14 +26,16 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty] public partial int PopupFontSize { get; set; }
     [ObservableProperty] public partial double PopupOpacity { get; set; }
 
+    public double PopupFontSizeDouble
+    {
+        get => PopupFontSize;
+        set { if (PopupFontSize != (int)value) { PopupFontSize = (int)value; OnPropertyChanged(nameof(PopupFontSizeDouble)); } }
+    }
+
     public bool RunAtStartup
     {
         get => GetRunAtStartup();
-        set
-        {
-            SetRunAtStartup(value);
-            OnPropertyChanged(nameof(RunAtStartup));
-        }
+        set { SetRunAtStartup(value); OnPropertyChanged(nameof(RunAtStartup)); }
     }
 
     public Windows.UI.Color PopupBackgroundColorColor
@@ -50,12 +52,17 @@ public partial class SettingsViewModel : ObservableObject
     }
     public SolidColorBrush PopupTextColorBrush => new(PopupTextColorColor);
 
-    public string PopupOpacityPercentage => $"{(PopupOpacity * 100):F0}% opacity";
+    public string PopupOpacityPercentage => $"{(PopupOpacity * 100):F0}%";
+
+    public IRelayCommand ShowSettingsCommand { get; }
+    public Action? RequestShowSettings { get; set; }
 
     public SettingsViewModel(IKeyboardHookService hookService, IHistoryDatabase historyDatabase)
     {
         _hookService = hookService;
         _historyDatabase = historyDatabase;
+
+        ShowSettingsCommand = new RelayCommand(() => RequestShowSettings?.Invoke());
 
         LocalPreferences.Load();
         IsEnabled = LocalPreferences.IsHookEnabled;
@@ -67,15 +74,27 @@ public partial class SettingsViewModel : ObservableObject
         PopupFontSize = LocalPreferences.PopupFontSize;
         PopupOpacity = LocalPreferences.PopupOpacity;
 
-        if (IsEnabled) _hookService.StartHook();
+        // Sync initial state
+        _hookService.IsTransliterationEnabled = IsEnabled;
+
+        // Listen for Global Hotkey updates so the UI switch stays synced!
+        _hookService.OnStateChanged += (s, isEnabled) =>
+        {
+            var dispatcher = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
+            dispatcher?.TryEnqueue(() =>
+            {
+                IsEnabled = isEnabled;
+                LocalPreferences.IsHookEnabled = isEnabled;
+                LocalPreferences.Save();
+            });
+        };
     }
 
     partial void OnIsEnabledChanged(bool value)
     {
         LocalPreferences.IsHookEnabled = value;
         LocalPreferences.Save();
-        if (value) _hookService.StartHook();
-        else _hookService.StopHook();
+        _hookService.IsTransliterationEnabled = value;
     }
 
     partial void OnIsOnlineEngineEnabledChanged(bool value) { LocalPreferences.IsOnlineEngineEnabled = value; LocalPreferences.Save(); }
@@ -89,30 +108,8 @@ public partial class SettingsViewModel : ObservableObject
     private const string StartupKey = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Run";
     private const string AppName = "Winmozhi";
 
-    private static bool GetRunAtStartup()
-    {
-        try
-        {
-            using var key = Registry.CurrentUser.OpenSubKey(StartupKey);
-            return key?.GetValue(AppName) != null;
-        }
-        catch { return false; }
-    }
-
-    private static void SetRunAtStartup(bool enable)
-    {
-        try
-        {
-            using var key = Registry.CurrentUser.OpenSubKey(StartupKey, true);
-            if (enable)
-            {
-                var exePath = Environment.ProcessPath;
-                if (!string.IsNullOrEmpty(exePath)) key?.SetValue(AppName, $"\"{exePath}\"");
-            }
-            else key?.DeleteValue(AppName, false);
-        }
-        catch { }
-    }
+    private static bool GetRunAtStartup() { try { using var key = Registry.CurrentUser.OpenSubKey(StartupKey); return key?.GetValue(AppName) != null; } catch { return false; } }
+    private static void SetRunAtStartup(bool enable) { try { using var key = Registry.CurrentUser.OpenSubKey(StartupKey, true); if (enable) { var exePath = Environment.ProcessPath; if (!string.IsNullOrEmpty(exePath)) key?.SetValue(AppName, $"\"{exePath}\""); } else key?.DeleteValue(AppName, false); } catch { } }
 
     [RelayCommand]
     private async Task ClearHistoryAsync()
@@ -124,22 +121,8 @@ public partial class SettingsViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void ExitApp()
-    {
-        _hookService.StopHook();
-        Application.Current.Exit();
-    }
+    private void ExitApp() { _hookService.StopHook(); Application.Current.Exit(); }
 
-    private static Windows.UI.Color HexToColor(string hex, Windows.UI.Color fallback)
-    {
-        try
-        {
-            if (string.IsNullOrWhiteSpace(hex)) return fallback;
-            hex = hex.TrimStart('#');
-            if (hex.Length == 6) return Windows.UI.Color.FromArgb(255, byte.Parse(hex[..2], System.Globalization.NumberStyles.HexNumber), byte.Parse(hex[2..4], System.Globalization.NumberStyles.HexNumber), byte.Parse(hex[4..6], System.Globalization.NumberStyles.HexNumber));
-        }
-        catch { }
-        return fallback;
-    }
+    private static Windows.UI.Color HexToColor(string hex, Windows.UI.Color fallback) { try { if (string.IsNullOrWhiteSpace(hex)) return fallback; hex = hex.TrimStart('#'); if (hex.Length == 6) return Windows.UI.Color.FromArgb(255, byte.Parse(hex[..2], System.Globalization.NumberStyles.HexNumber), byte.Parse(hex[2..4], System.Globalization.NumberStyles.HexNumber), byte.Parse(hex[4..6], System.Globalization.NumberStyles.HexNumber)); } catch { } return fallback; }
     private static string ColorToHex(Windows.UI.Color color) => $"#{color.R:X2}{color.G:X2}{color.B:X2}";
 }

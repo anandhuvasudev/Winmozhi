@@ -11,15 +11,31 @@
     </Window.SystemBackdrop>
 
     <Grid Background="Transparent">
-        <tb:TaskbarIcon x:Name="TrayIcon" ToolTipText="Winmozhi Manglish Keyboard" DoubleTapped="TrayIcon_DoubleTapped" Visibility="Visible">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="32"/>
+            <!-- Draggable Title Bar Area -->
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <Grid x:Name="AppTitleBar" Grid.Row="0" Background="Transparent" />
+
+        <!-- Notification Tray Icon configured to use native Commands -->
+        <tb:TaskbarIcon x:Name="TrayIcon" 
+                        IconSource="/Assets/WindowIcon.ico"
+                        ToolTipText="Winmozhi Manglish Keyboard" 
+                        DoubleClickCommand="{x:Bind ViewModel.ShowSettingsCommand}"
+                        Visibility="Visible" 
+                        Grid.Row="0">
             <tb:TaskbarIcon.ContextFlyout>
                 <MenuFlyout>
-                    <MenuFlyoutItem Text="Open Settings" Click="ShowSettings_Click">
+                    <MenuFlyoutItem Text="Open Settings" Command="{x:Bind ViewModel.ShowSettingsCommand}">
                         <MenuFlyoutItem.Icon>
                             <FontIcon Glyph="&#xE713;" />
                         </MenuFlyoutItem.Icon>
                     </MenuFlyoutItem>
+
                     <MenuFlyoutSeparator />
+
                     <MenuFlyoutItem Text="Quit Winmozhi" Command="{x:Bind ViewModel.ExitAppCommand}">
                         <MenuFlyoutItem.Icon>
                             <FontIcon Glyph="&#xE7E8;" Foreground="#E81123"/>
@@ -29,139 +45,205 @@
             </tb:TaskbarIcon.ContextFlyout>
         </tb:TaskbarIcon>
 
-        <ScrollViewer>
-            <Grid Padding="28,32,28,40" MinWidth="520" MaxWidth="1200" HorizontalAlignment="Stretch">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="*"/>
-                    <RowDefinition Height="Auto"/>
-                </Grid.RowDefinitions>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <StackPanel Width="420" Margin="0,12,0,40" Spacing="24" HorizontalAlignment="Center">
 
-                <!-- Header -->
-                <StackPanel Grid.Row="0" Grid.ColumnSpan="2" Spacing="8" HorizontalAlignment="Center">
-                    <TextBlock Text="മ" FontSize="54" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,6,0,0"/>
+                <StackPanel Spacing="16" HorizontalAlignment="Center" Margin="0,0,0,12">
+                    <Image Source="ms-appx:///Assets/Square150x150Logo.png" Width="96" Height="96" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center" />
                     <StackPanel Spacing="4" HorizontalAlignment="Center">
-                        <TextBlock Text="Winmozhi Settings" Style="{ThemeResource TitleLargeTextBlockStyle}" FontWeight="SemiBold" HorizontalAlignment="Center"/>
-                        <TextBlock Text="Personalize your Malayalam transliteration experience" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" HorizontalAlignment="Center" TextWrapping="Wrap" MaxWidth="1000"/>
+                        <TextBlock Text="Winmozhi" Style="{ThemeResource TitleLargeTextBlockStyle}" FontWeight="Bold" HorizontalAlignment="Center"/>
+                        <TextBlock Text="Manglish Keyboard Configuration" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" HorizontalAlignment="Center"/>
                     </StackPanel>
                 </StackPanel>
 
-                <!-- Left Column: Application -->
-                <StackPanel Grid.Row="1" Grid.Column="0" Spacing="16">
-                    <TextBlock Text="Application" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
-                    <StackPanel Spacing="0">
-                        <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="8,8,0,0" Padding="20,16">
-                            <Grid ColumnSpacing="16">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <FontIcon Glyph="&#xE765;" FontSize="20" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center"/>
-                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="8,0,0,0">
-                                    <TextBlock Text="Enable Winmozhi Globally" Style="{ThemeResource BodyTextBlockStyle}" FontWeight="SemiBold"/>
-                                    <TextBlock Text="Turns the transliteration engine on or off system-wide." Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Margin="0,2,0,0"/>
-                                </StackPanel>
-                                <ToggleSwitch Grid.Column="2" IsOn="{x:Bind ViewModel.IsEnabled, Mode=TwoWay}" VerticalAlignment="Center" Margin="0"/>
-                            </Grid>
-                        </Border>
-                        <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1,0,1,1" CornerRadius="0,0,8,8" Padding="20,16">
-                            <Grid ColumnSpacing="16">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <FontIcon Glyph="&#xE7BA;" FontSize="20" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center"/>
-                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="8,0,0,0">
-                                    <TextBlock Text="Start with Windows" Style="{ThemeResource BodyTextBlockStyle}" FontWeight="SemiBold"/>
-                                    <TextBlock Text="Automatically run Winmozhi seamlessly in the background on boot." Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Margin="0,2,0,0" TextWrapping="Wrap"/>
-                                </StackPanel>
-                                <ToggleSwitch Grid.Column="2" IsOn="{x:Bind ViewModel.RunAtStartup, Mode=TwoWay}" VerticalAlignment="Center" Margin="0"/>
-                            </Grid>
-                        </Border>
-                    </StackPanel>
-                </StackPanel>
-
-                <!-- Right Column: Engine & Typography -->
-                <StackPanel Grid.Row="1" Grid.Column="1" Spacing="16">
-                    <TextBlock Text="Engine &amp; Output Modes" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
-                    <StackPanel Spacing="0">
-                        <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="8,8,0,0" Padding="20,16">
-                            <Grid ColumnSpacing="16">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <FontIcon Glyph="&#xE753;" FontSize="20" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center"/>
-                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="8,0,0,0">
-                                    <TextBlock Text="Enable Online Engine" Style="{ThemeResource BodyTextBlockStyle}" FontWeight="SemiBold"/>
-                                    <TextBlock Text="Use Google Input Tools for highly accurate results. Disable for offline privacy." Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Margin="0,2,0,0" TextWrapping="Wrap"/>
-                                </StackPanel>
-                                <ToggleSwitch Grid.Column="2" IsOn="{x:Bind ViewModel.IsOnlineEngineEnabled, Mode=TwoWay}" VerticalAlignment="Center" Margin="0"/>
-                            </Grid>
-                        </Border>
-                        <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1,0,1,1" CornerRadius="0" Padding="20,16">
-                            <Grid ColumnSpacing="16">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <FontIcon Glyph="&#xE8D3;" FontSize="20" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center"/>
-                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="8,0,0,0">
-                                    <TextBlock Text="FML Legacy Font Output" Style="{ThemeResource BodyTextBlockStyle}" FontWeight="SemiBold"/>
-                                    <TextBlock Text="Outputs text mapped to FML encoding for Photoshop." Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Margin="0,2,0,0" TextWrapping="Wrap"/>
-                                </StackPanel>
-                                <ToggleSwitch Grid.Column="2" IsOn="{x:Bind ViewModel.IsFmlFontModeEnabled, Mode=TwoWay}" VerticalAlignment="Center" Margin="0"/>
-                            </Grid>
-                        </Border>
-                        <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1,0,1,1" CornerRadius="0,0,8,8" Padding="20,16">
-                            <Grid ColumnSpacing="16">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <FontIcon Glyph="&#xE8D3;" FontSize="20" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center"/>
-                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="8,0,0,0">
-                                    <TextBlock Text="ML Legacy Font Output" Style="{ThemeResource BodyTextBlockStyle}" FontWeight="SemiBold"/>
-                                    <TextBlock Text="Outputs text mapped to ML encoding for older software." Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Margin="0,2,0,0" TextWrapping="Wrap"/>
-                                </StackPanel>
-                                <ToggleSwitch Grid.Column="2" IsOn="{x:Bind ViewModel.IsMlFontModeEnabled, Mode=TwoWay}" VerticalAlignment="Center" Margin="0"/>
-                            </Grid>
-                        </Border>
-                    </StackPanel>
-                </StackPanel>
-
-                <!-- Bottom: Data Section spans both columns -->
-                <StackPanel Grid.Row="2" Grid.ColumnSpan="2" Spacing="8" Margin="0,20,0,0">
-                    <TextBlock Text="Personal Dictionary" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
-                    <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="8" Padding="20,16">
-                        <Grid ColumnSpacing="16">
+                <StackPanel Spacing="4">
+                    <TextBlock Text="Application" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Margin="2,0,0,4"/>
+                    <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="8,8,0,0" Padding="16,14">
+                        <Grid ColumnSpacing="12">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
-                            <FontIcon Glyph="&#xE7AC;" FontSize="20" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center"/>
+                            <FontIcon Glyph="&#xE765;" FontSize="18" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center"/>
                             <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="8,0,0,0">
-                                <TextBlock Text="Clear Learned Words" Style="{ThemeResource BodyTextBlockStyle}" FontWeight="SemiBold"/>
-                                <TextBlock Text="Winmozhi learns your patterns. Click to reset." Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Margin="0,2,0,0" TextWrapping="Wrap"/>
-                                <TextBlock Text="{x:Bind ViewModel.HistoryStatusMessage, Mode=OneWay}" Foreground="{ThemeResource SystemFillColorSuccessBrush}" FontWeight="SemiBold" FontSize="12" Margin="0,4,0,0"/>
+                                <TextBlock Text="Enable Globally" Style="{ThemeResource BodyTextBlockStyle}" FontWeight="SemiBold"/>
+                                <TextBlock Text="Turns transliteration on or off." Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Margin="0,2,0,0"/>
                             </StackPanel>
-                            <Button Grid.Column="2" Content="Clear database" Command="{x:Bind ViewModel.ClearHistoryCommand}" VerticalAlignment="Center"/>
+                            <ToggleSwitch Grid.Column="2" IsOn="{x:Bind ViewModel.IsEnabled, Mode=TwoWay}" VerticalAlignment="Center" Margin="0"/>
+                        </Grid>
+                    </Border>
+                    <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1,0,1,1" CornerRadius="0,0,8,8" Padding="16,14">
+                        <Grid ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <FontIcon Glyph="&#xE7BA;" FontSize="18" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center"/>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="8,0,0,0">
+                                <TextBlock Text="Start with Windows" Style="{ThemeResource BodyTextBlockStyle}" FontWeight="SemiBold"/>
+                                <TextBlock Text="Launch seamlessly in background on boot." Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Margin="0,2,0,0" TextWrapping="Wrap"/>
+                            </StackPanel>
+                            <ToggleSwitch Grid.Column="2" IsOn="{x:Bind ViewModel.RunAtStartup, Mode=TwoWay}" VerticalAlignment="Center" Margin="0"/>
                         </Grid>
                     </Border>
                 </StackPanel>
 
-                <TextBlock Grid.Row="3" Grid.ColumnSpan="2" Text="v1.0.0 • Crafted for Malayalam" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorDisabledBrush}" Margin="0,8,0,0" HorizontalAlignment="Center"/>
-            </Grid>
+                <StackPanel Spacing="4">
+                    <TextBlock Text="Engine &amp; Output" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Margin="2,0,0,4"/>
+                    <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="8,8,0,0" Padding="16,14">
+                        <Grid ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <FontIcon Glyph="&#xE753;" FontSize="18" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center"/>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="8,0,0,0">
+                                <TextBlock Text="Enable Online Engine" Style="{ThemeResource BodyTextBlockStyle}" FontWeight="SemiBold"/>
+                                <TextBlock Text="Fetch accurate results from Google APIs." Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Margin="0,2,0,0" TextWrapping="Wrap"/>
+                            </StackPanel>
+                            <ToggleSwitch Grid.Column="2" IsOn="{x:Bind ViewModel.IsOnlineEngineEnabled, Mode=TwoWay}" VerticalAlignment="Center" Margin="0"/>
+                        </Grid>
+                    </Border>
+                    <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1,0,1,1" CornerRadius="0" Padding="16,14">
+                        <Grid ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <FontIcon Glyph="&#xE8D3;" FontSize="18" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center"/>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="8,0,0,0">
+                                <TextBlock Text="FML Font Compatibility" Style="{ThemeResource BodyTextBlockStyle}" FontWeight="SemiBold"/>
+                                <TextBlock Text="Output mapped for FML legacy software." Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Margin="0,2,0,0" TextWrapping="Wrap"/>
+                            </StackPanel>
+                            <ToggleSwitch Grid.Column="2" IsOn="{x:Bind ViewModel.IsFmlFontModeEnabled, Mode=TwoWay}" VerticalAlignment="Center" Margin="0"/>
+                        </Grid>
+                    </Border>
+                    <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1,0,1,1" CornerRadius="0,0,8,8" Padding="16,14">
+                        <Grid ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <FontIcon Glyph="&#xE8D3;" FontSize="18" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center"/>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="8,0,0,0">
+                                <TextBlock Text="ML Font Compatibility" Style="{ThemeResource BodyTextBlockStyle}" FontWeight="SemiBold"/>
+                                <TextBlock Text="Output mapped for ML legacy software." Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Margin="0,2,0,0" TextWrapping="Wrap"/>
+                            </StackPanel>
+                            <ToggleSwitch Grid.Column="2" IsOn="{x:Bind ViewModel.IsMlFontModeEnabled, Mode=TwoWay}" VerticalAlignment="Center" Margin="0"/>
+                        </Grid>
+                    </Border>
+                </StackPanel>
+
+                <StackPanel Spacing="4">
+                    <TextBlock Text="Personalize Popup" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Margin="2,0,0,4"/>
+                    <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="8,8,0,0" Padding="16,14">
+                        <Grid ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <FontIcon Glyph="&#xE790;" FontSize="18" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center"/>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="8,0,0,0">
+                                <TextBlock Text="Background Color" Style="{ThemeResource BodyTextBlockStyle}" FontWeight="SemiBold"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                <Border Width="24" Height="24" CornerRadius="12" Background="{x:Bind ViewModel.PopupBackgroundColorBrush, Mode=OneWay}" BorderBrush="{ThemeResource SurfaceStrokeColorDefaultBrush}" BorderThickness="1" />
+                                <DropDownButton Content="Edit">
+                                    <DropDownButton.Flyout>
+                                        <Flyout>
+                                            <ColorPicker Color="{x:Bind ViewModel.PopupBackgroundColorColor, Mode=TwoWay}" IsAlphaEnabled="False" IsMoreButtonVisible="False"/>
+                                        </Flyout>
+                                    </DropDownButton.Flyout>
+                                </DropDownButton>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                    <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1,0,1,1" CornerRadius="0" Padding="16,14">
+                        <Grid ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <FontIcon Glyph="&#xE8D3;" FontSize="18" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center"/>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="8,0,0,0">
+                                <TextBlock Text="Text Color" Style="{ThemeResource BodyTextBlockStyle}" FontWeight="SemiBold"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                <Border Width="24" Height="24" CornerRadius="12" Background="{x:Bind ViewModel.PopupTextColorBrush, Mode=OneWay}" BorderBrush="{ThemeResource SurfaceStrokeColorDefaultBrush}" BorderThickness="1" />
+                                <DropDownButton Content="Edit">
+                                    <DropDownButton.Flyout>
+                                        <Flyout>
+                                            <ColorPicker Color="{x:Bind ViewModel.PopupTextColorColor, Mode=TwoWay}" IsAlphaEnabled="False" IsMoreButtonVisible="False"/>
+                                        </Flyout>
+                                    </DropDownButton.Flyout>
+                                </DropDownButton>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                    <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1,0,1,1" CornerRadius="0" Padding="16,10">
+                        <Grid ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <FontIcon Glyph="&#xE8E9;" FontSize="18" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center"/>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="8,0,0,0">
+                                <TextBlock Text="Text Scale" Style="{ThemeResource BodyTextBlockStyle}" FontWeight="SemiBold"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+                                <TextBlock Text="{x:Bind ViewModel.PopupFontSizeDouble, Mode=OneWay}" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Width="20"/>
+                                <Slider Minimum="10" Maximum="32" StepFrequency="1" Value="{x:Bind ViewModel.PopupFontSizeDouble, Mode=TwoWay}" Width="100" VerticalAlignment="Center" Margin="0"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                    <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1,0,1,1" CornerRadius="0,0,8,8" Padding="16,10">
+                        <Grid ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <FontIcon Glyph="&#xE7B3;" FontSize="18" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center"/>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="8,0,0,0">
+                                <TextBlock Text="Panel Opacity" Style="{ThemeResource BodyTextBlockStyle}" FontWeight="SemiBold"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+                                <TextBlock Text="{x:Bind ViewModel.PopupOpacityPercentage, Mode=OneWay}" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Width="40" TextAlignment="Right"/>
+                                <Slider Minimum="0.1" Maximum="1.0" StepFrequency="0.05" Value="{x:Bind ViewModel.PopupOpacity, Mode=TwoWay}" Width="100" VerticalAlignment="Center" Margin="0"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                </StackPanel>
+
+                <StackPanel Spacing="4">
+                    <TextBlock Text="Database" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Margin="2,0,0,4"/>
+                    <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="8" Padding="16,14">
+                        <Grid ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <FontIcon Glyph="&#xE7AC;" FontSize="18" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center"/>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="8,0,0,0">
+                                <TextBlock Text="Clear Learned Words" Style="{ThemeResource BodyTextBlockStyle}" FontWeight="SemiBold"/>
+                                <TextBlock Text="{x:Bind ViewModel.HistoryStatusMessage, Mode=OneWay}" Foreground="{ThemeResource SystemFillColorSuccessBrush}" FontWeight="SemiBold" FontSize="12" Margin="0,2,0,0"/>
+                            </StackPanel>
+                            <Button Grid.Column="2" Content="Clear data" Command="{x:Bind ViewModel.ClearHistoryCommand}" VerticalAlignment="Center"/>
+                        </Grid>
+                    </Border>
+                </StackPanel>
+
+                <TextBlock Text="v1.0.0 • Crafted for Malayalam with ❤️" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorDisabledBrush}" Margin="0,8,0,0" HorizontalAlignment="Center"/>
+            </StackPanel>
         </ScrollViewer>
     </Grid>
 </Window>
