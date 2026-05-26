@@ -10,8 +10,8 @@ namespace Winmozhi.Core.Utilities;
 public static class UpdateService
 {
     // REPLACE THIS WITH YOUR GITHUB USERNAME
-    private const string GitHubRepoApiUrl = "https://api.github.com/repos/anandhuvasudev/Winmozhi/releases/latest";
-    public const string CurrentVersion = "v1.0.0"; // You will bump this locally as needed
+    private const string GitHubRepoApiUrl = "https://api.github.com/repos/YOUR_GITHUB_USERNAME/Winmozhi/releases/latest";
+    public const string CurrentVersion = "v1.0.0";
 
     public static async Task<(bool UpdateAvailable, string LatestVersion, string DownloadUrl)> CheckForUpdatesAsync()
     {
@@ -29,10 +29,15 @@ public static class UpdateService
             if (latestVersion != CurrentVersion && latestVersion.StartsWith('v'))
             {
                 var assets = doc.RootElement.GetProperty("assets");
-                if (assets.GetArrayLength() > 0)
+
+                // NEW: Search specifically for the .zip file so we don't accidentally grab the .exe installer
+                foreach (var asset in assets.EnumerateArray())
                 {
-                    string downloadUrl = assets[0].GetProperty("browser_download_url").GetString() ?? "";
-                    return (true, latestVersion, downloadUrl);
+                    string downloadUrl = asset.GetProperty("browser_download_url").GetString() ?? "";
+                    if (downloadUrl.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return (true, latestVersion, downloadUrl);
+                    }
                 }
             }
         }
