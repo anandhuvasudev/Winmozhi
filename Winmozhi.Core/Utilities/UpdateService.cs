@@ -10,7 +10,7 @@ namespace Winmozhi.Core.Utilities;
 public static class UpdateService
 {
     // REPLACE THIS WITH YOUR GITHUB USERNAME
-    private const string GitHubRepoApiUrl = "https://api.github.com/repos/YOUR_GITHUB_USERNAME/Winmozhi/releases/latest";
+    private const string GitHubRepoApiUrl = "https://api.github.com/repos/anandhuvasudev/Winmozhi/releases/latest";
     public const string CurrentVersion = "v1.0.0";
 
     public static async Task<(bool UpdateAvailable, string LatestVersion, string DownloadUrl)> CheckForUpdatesAsync()
