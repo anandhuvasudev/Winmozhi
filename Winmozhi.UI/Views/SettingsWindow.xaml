@@ -279,7 +279,7 @@
                     </Border>
                 </StackPanel>
 
-                <TextBlock Text="v1.0.0 • Crafted for Malayalam with ❤️" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorDisabledBrush}" Margin="0,8,0,0" HorizontalAlignment="Center"/>
+                <TextBlock Text="v1.0.0 • Crafted for Malayalam ❤️" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorDisabledBrush}" Margin="0,8,0,0" HorizontalAlignment="Center"/>
             </StackPanel>
         </ScrollViewer>
     </Grid>
