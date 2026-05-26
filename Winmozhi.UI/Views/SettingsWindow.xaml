@@ -253,11 +253,12 @@
                     </Border>
                 </StackPanel>
 
-                <!-- Help Section -->
+                <!-- Help & About Section -->
                 <StackPanel Spacing="4">
-                    <TextBlock Text="Help" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Margin="2,0,0,4"/>
+                    <TextBlock Text="Help &amp; About" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Margin="2,0,0,4"/>
 
-                    <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="8" Padding="16,14">
+                    <!-- How to Use Card -->
+                    <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="8,8,0,0" Padding="16,14">
                         <Grid ColumnSpacing="12">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto"/>
@@ -270,6 +271,26 @@
                                 <TextBlock Text="View the quick start guide and shortcuts." Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Margin="0,2,0,0" TextWrapping="Wrap"/>
                             </StackPanel>
                             <Button Grid.Column="2" Content="View Guide" Click="ShowHowToUse_Click" VerticalAlignment="Center"/>
+                        </Grid>
+                    </Border>
+
+                    <!-- Official Website Card -->
+                    <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1,0,1,1" CornerRadius="0,0,8,8" Padding="16,14">
+                        <Grid ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <!-- Globe Icon -->
+                            <FontIcon Glyph="&#xE12B;" FontSize="18" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center"/>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="8,0,0,0">
+                                <TextBlock Text="Official Website" Style="{ThemeResource BodyTextBlockStyle}" FontWeight="SemiBold"/>
+                                <TextBlock Text="Visit us online for updates and support." Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Margin="0,2,0,0" TextWrapping="Wrap"/>
+                            </StackPanel>
+
+                            <!-- Native Hyperlink Button -->
+                            <HyperlinkButton Grid.Column="2" Content="winmozhi.com" NavigateUri="https://winmozhi.com" VerticalAlignment="Center"/>
                         </Grid>
                     </Border>
                 </StackPanel>

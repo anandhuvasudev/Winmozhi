@@ -11,7 +11,7 @@
   <Identity
     Name="AnandhuVasudev.Winmozhi"
     Publisher="CN=90FD2E70-7FC8-4AAC-9E2D-E6A67803C5B5"
-    Version="1.0.1.0" />
+    Version="1.0.3.0" />
 
   <mp:PhoneIdentity PhoneProductId="da30d287-427a-46ca-97cd-1f54e2efd19a" PhonePublisherId="00000000-0000-0000-0000-000000000000"/>
 

@@ -39,7 +39,8 @@
                 <!-- Suggestion List -->
                 <ListView x:Name="SuggestionsListView"
                           SelectionMode="Single"
-                          IsItemClickEnabled="False"
+                          IsItemClickEnabled="True"
+                          ItemClick="SuggestionsListView_ItemClick"
                           CornerRadius="4"
                           Margin="0"
                           Padding="0"

@@ -111,6 +111,11 @@ public partial class PopupViewModel : ObservableObject
 
     private void HookService_OnInsertRequested(object? _, string trailingText)
     {
+        InsertCurrentSelection(trailingText);
+    }
+
+    public void InsertCurrentSelection(string trailingText)
+    {
         string manglish = CurrentManglish;
 
         _dispatcher.TryEnqueue(() =>

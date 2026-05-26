@@ -96,6 +96,22 @@ public sealed partial class PopupView : Window
         }
     }
 
+    private void SuggestionsListView_ItemClick(object _, ItemClickEventArgs e)
+    {
+        if (e.ClickedItem is string selectedWord)
+        {
+            int index = ViewModel.Suggestions.IndexOf(selectedWord);
+            if (index >= 0)
+            {
+                // Update the selection and force the ViewModel to insert it
+                ViewModel.SelectedIndex = index;
+
+                // We pass a space " " so that typing continues naturally after insertion
+                ViewModel.InsertCurrentSelection(" ");
+            }
+        }
+    }
+
     private static bool TryParseColor(string hexColor, out Windows.UI.Color color)
     {
         color = Windows.UI.Color.FromArgb(255, 255, 255, 255);
