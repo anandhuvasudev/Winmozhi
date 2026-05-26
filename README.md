@@ -1,5 +1,5 @@
 ⌨️ Winmozhi (വിൻമൊഴി)
-<div align="center"> <img src="Winmozhi.UI/Assets/Square150x150Logo.png" alt="Winmozhi Logo" width="140"/>
+<div align="center"> <img src="Winmozhi.UI/Assets/Square44x44Logo.scale-200.png" alt="Winmozhi Logo" width="140"/>
 The Ultimate Manglish → Malayalam Keyboard for Windows
 
 Type Malayalam effortlessly anywhere across your system — fast, native, and beautiful.
