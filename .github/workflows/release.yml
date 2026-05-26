@@ -1,0 +1,48 @@
+name: Build and Release Winmozhi
+
+on:
+  push:
+    branches:
+      - master
+      - main
+  workflow_dispatch:
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    - name: Setup .NET 10
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '10.0.x'
+
+    - name: Restore Dependencies
+      run: dotnet restore Winmozhi.UI/Winmozhi.UI.csproj
+
+    - name: Publish App
+      run: >
+        dotnet publish Winmozhi.UI/Winmozhi.UI.csproj 
+        -c Release 
+        -r win-x64 
+        --self-contained true 
+        -p:PublishReadyToRun=true 
+        -p:WindowsAppSDKSelfContained=true 
+        -o ./publish_output
+
+    - name: Zip the Output
+      run: Compress-Archive -Path ./publish_output/* -DestinationPath Winmozhi-Latest.zip
+
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: v1.0.${{ github.run_number }}
+        name: Winmozhi Update (v1.0.${{ github.run_number }})
+        files: Winmozhi-Latest.zip
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
