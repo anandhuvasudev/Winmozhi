@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
 using Winmozhi.Core.Interfaces;
 
 namespace Winmozhi.Core.Engines;
@@ -46,7 +45,7 @@ public class TrieOfflineEngine : IOfflineEngine
         if (string.IsNullOrWhiteSpace(manglishText)) return [];
         string searchKey = manglishText.ToLowerInvariant();
 
-        var results = new List<string>();
+        var results = new List<string>(10);
         var current = _root;
         bool exactPrefixFound = true;
 
@@ -59,41 +58,55 @@ public class TrieOfflineEngine : IOfflineEngine
             }
         }
 
+        // 1. Exact Match via Trie
         if (exactPrefixFound && current != null)
         {
             results.AddRange(current.Suggestions);
             CollectDescendants(current, results, 5);
         }
 
+        // 2. Ultra-Fast Zero-Allocation Fuzzy Match
         if (results.Count < 3 && searchKey.Length > 2)
         {
             string normalizedSearch = NormalizeManglish(searchKey);
 
-            var fuzzyMatches = _flatDictionary
-                .Where(x => !string.IsNullOrEmpty(x.Key)) // Fix CS8602 Null Dereference Protection
-                .Select(x => new
-                {
-                    x.Key, // Fix IDE0037 Member Simplification
-                    Suggestions = x.Value,
-                    Distance = ComputeLevenshteinDistance(normalizedSearch, NormalizeManglish(x.Key))
-                })
-                .Where(x => x.Distance <= 2)
-                .OrderBy(x => x.Distance)
-                .ThenBy(x => Math.Abs(x.Key.Length - searchKey.Length))
-                .SelectMany(x => x.Suggestions)
-                .Where(x => !results.Contains(x));
+            // We use a tuple list instead of LINQ to avoid massive memory allocations on every keystroke
+            var candidates = new List<(int Distance, int LengthDiff, List<string> Suggestions)>();
 
-            foreach (var match in fuzzyMatches)
+            foreach (var item in _flatDictionary)
             {
-                results.Add(match);
-                if (results.Count >= 5) break;
+                if (string.IsNullOrEmpty(item.Key)) continue;
+
+                int dist = ComputeLevenshteinDistance(normalizedSearch.AsSpan(), NormalizeManglish(item.Key).AsSpan());
+
+                if (dist <= 2)
+                {
+                    candidates.Add((dist, Math.Abs(item.Key.Length - searchKey.Length), item.Value));
+                }
+            }
+
+            // High-speed inline sort
+            candidates.Sort((a, b) =>
+            {
+                int cmp = a.Distance.CompareTo(b.Distance);
+                if (cmp != 0) return cmp;
+                return a.LengthDiff.CompareTo(b.LengthDiff);
+            });
+
+            foreach (var match in candidates)
+            {
+                foreach (var sug in match.Suggestions)
+                {
+                    if (!results.Contains(sug)) results.Add(sug);
+                    if (results.Count >= 5) goto EndFuzzySearch; // Fast exit
+                }
             }
         }
 
+    EndFuzzySearch:
         return results;
     }
 
-    // Fix CA1822: Marked method as static for performance optimization
     private static void CollectDescendants(TrieNode node, List<string> results, int max)
     {
         if (results.Count >= max) return;
@@ -124,28 +137,32 @@ public class TrieOfflineEngine : IOfflineEngine
                     .Replace("njn", "nj");
     }
 
-    private static int ComputeLevenshteinDistance(string s, string t)
+    /// <summary>
+    /// Computes string distance with ZERO heap allocations by utilizing stack memory (stackalloc).
+    /// This prevents the Garbage Collector from stuttering the user's keyboard.
+    /// </summary>
+    private static int ComputeLevenshteinDistance(ReadOnlySpan<char> s, ReadOnlySpan<char> t)
     {
-        int n = s.Length;
-        int m = t.Length;
-        int[,] d = new int[n + 1, m + 1];
+        if (s.Length == 0) return t.Length;
+        if (t.Length == 0) return s.Length;
 
-        if (n == 0) return m;
-        if (m == 0) return n;
+        // Allocate memory directly on the CPU stack. Extremely fast, zero garbage.
+        Span<int> v0 = stackalloc int[t.Length + 1];
+        Span<int> v1 = stackalloc int[t.Length + 1];
 
-        for (int i = 0; i <= n; d[i, 0] = i++) { }
-        for (int j = 0; j <= m; d[0, j] = j++) { }
+        for (int i = 0; i < v0.Length; i++) v0[i] = i;
 
-        for (int i = 1; i <= n; i++)
+        for (int i = 0; i < s.Length; i++)
         {
-            for (int j = 1; j <= m; j++)
+            v1[0] = i + 1;
+            for (int j = 0; j < t.Length; j++)
             {
-                int cost = (t[j - 1] == s[i - 1]) ? 0 : 1;
-                d[i, j] = Math.Min(
-                    Math.Min(d[i - 1, j] + 1, d[i, j - 1] + 1),
-                    d[i - 1, j - 1] + cost);
+                int cost = (s[i] == t[j]) ? 0 : 1;
+                v1[j + 1] = Math.Min(Math.Min(v1[j] + 1, v0[j + 1] + 1), v0[j] + cost);
             }
+            for (int j = 0; j < v0.Length; j++) v0[j] = v1[j];
         }
-        return d[n, m];
+
+        return v1[t.Length];
     }
 }
