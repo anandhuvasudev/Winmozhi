@@ -11,8 +11,9 @@ public static class LocalPreferences
         "Winmozhi", "settings.json");
 
     // ── Feature Toggles ──────────────────────────────────────────────────────
+    public static bool IsFirstRun { get; set; } = true; // NEW FLAG
     public static bool IsHookEnabled { get; set; } = true;
-    public static bool IsOnlineEngineEnabled { get; set; } = false;  // Disabled by default to avoid network errors when offline
+    public static bool IsOnlineEngineEnabled { get; set; } = false;
     public static bool IsFmlFontModeEnabled { get; set; } = false;
     public static bool IsMlFontModeEnabled { get; set; } = false;
 
@@ -31,6 +32,7 @@ public static class LocalPreferences
                 var json = File.ReadAllText(SettingsPath);
                 var doc = JsonDocument.Parse(json);
 
+                IsFirstRun = GetBoolProperty(doc, nameof(IsFirstRun), true);
                 IsHookEnabled = GetBoolProperty(doc, nameof(IsHookEnabled), true);
                 IsOnlineEngineEnabled = GetBoolProperty(doc, nameof(IsOnlineEngineEnabled), true);
                 IsFmlFontModeEnabled = GetBoolProperty(doc, nameof(IsFmlFontModeEnabled), false);
@@ -56,6 +58,7 @@ public static class LocalPreferences
             Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath)!);
             var settings = new
             {
+                IsFirstRun,
                 IsHookEnabled,
                 IsOnlineEngineEnabled,
                 IsFmlFontModeEnabled,
@@ -83,8 +86,6 @@ public static class LocalPreferences
         }
         catch { return "#0078D7"; }
     }
-
-    // ── JSON Helper Methods ──────────────────────────────────────────────────
 
     private static bool GetBoolProperty(JsonDocument doc, string propertyName, bool defaultValue)
     {
