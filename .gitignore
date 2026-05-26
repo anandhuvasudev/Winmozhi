@@ -52,3 +52,8 @@ crash.log
 !*.png
 !*.ico
 !*.csv
+
+# Microsoft Store & Security Files
+Package.StoreAssociation.xml
+*.pfx
+*_StoreKey.pfx

@@ -19,6 +19,10 @@ public sealed partial class PopupView : Window
     private readonly IKeyboardHookService _hookService;
     private readonly IntPtr _hwnd;
 
+    // Restored to original size
+    private const int PopupWidth = 180;
+    private const int PopupHeight = 260;
+
     public PopupView(PopupViewModel viewModel, IKeyboardHookService hookService)
     {
         this.InitializeComponent();
@@ -48,7 +52,7 @@ public sealed partial class PopupView : Window
         int cornerPreference = DWMWCP_ROUND;
         DwmSetWindowAttribute(_hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, ref cornerPreference, 4);
 
-        AppWindow.Resize(new Windows.Graphics.SizeInt32(180, 260));
+        AppWindow.Resize(new Windows.Graphics.SizeInt32(PopupWidth, PopupHeight));
 
         ApplyStoredStyles();
         ViewModel.PropertyChanged += ViewModel_PropertyChanged;
@@ -63,27 +67,21 @@ public sealed partial class PopupView : Window
     {
         try
         {
-            var grid = this.Content as Grid;
-            if (grid?.Children.Count > 0 && grid.Children[0] is Border border)
-            {
-                double opacity = Math.Clamp(LocalPreferences.PopupOpacity, 0.1, 1.0);
-                byte alpha = (byte)(opacity * 255);
+            double opacity = Math.Clamp(LocalPreferences.PopupOpacity, 0.1, 1.0);
+            byte alpha = (byte)(opacity * 255);
 
-                if (TryParseColor(LocalPreferences.PopupBackgroundColor, out var bgColor))
-                    border.Background = new SolidColorBrush(Windows.UI.Color.FromArgb(alpha, bgColor.R, bgColor.G, bgColor.B));
-                else
-                    border.Background = new SolidColorBrush(Windows.UI.Color.FromArgb(alpha, 26, 26, 26));
+            if (TryParseColor(LocalPreferences.PopupBackgroundColor, out var bgColor))
+                RootBorder.Background = new SolidColorBrush(Windows.UI.Color.FromArgb(alpha, bgColor.R, bgColor.G, bgColor.B));
+            else
+                RootBorder.Background = new SolidColorBrush(Windows.UI.Color.FromArgb(alpha, 26, 26, 26));
 
-                border.Opacity = 1.0;
+            if (TryParseColor(LocalPreferences.PopupTextColor, out var textColor))
+                CurrentManglishText.Foreground = new SolidColorBrush(textColor);
+            else
+                CurrentManglishText.Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 255, 255, 255));
 
-                if (TryParseColor(LocalPreferences.PopupTextColor, out var textColor))
-                    CurrentManglishText.Foreground = new SolidColorBrush(textColor);
-                else
-                    CurrentManglishText.Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 255, 255, 255));
-
-                double fontSize = LocalPreferences.PopupFontSize;
-                if (fontSize >= 10 && fontSize <= 32) CurrentManglishText.FontSize = fontSize - 4;
-            }
+            double fontSize = LocalPreferences.PopupFontSize;
+            if (fontSize >= 10 && fontSize <= 32) CurrentManglishText.FontSize = fontSize - 4;
         }
         catch { }
     }
@@ -126,33 +124,57 @@ public sealed partial class PopupView : Window
             if (ViewModel.IsVisible)
             {
                 var (x, y) = _hookService.GetCaretPosition();
+                bool isMouseFallback = false;
 
                 if (x == -1)
                 {
                     GetCursorPos(out var mousePos);
                     x = mousePos.X;
                     y = mousePos.Y;
+                    isMouseFallback = true;
                 }
 
-                int screenH = GetSystemMetrics(1);
-                int screenW = GetSystemMetrics(0);
+                // Multi-Monitor Intelligence
+                var point = new InteropPoint { X = (int)x, Y = (int)y };
+                IntPtr hMonitor = MonitorFromPoint(point, MONITOR_DEFAULTTONEAREST);
 
-                int popupWidth = 180;
-                int popupHeight = 260;
+                var monitorInfo = new MONITORINFO { cbSize = (uint)Marshal.SizeOf<MONITORINFO>() };
+                GetMonitorInfoW(hMonitor, ref monitorInfo);
 
-                int finalY = (int)y + 30;
                 int finalX = (int)x;
+                int finalY = (int)y;
 
-                if (finalY + popupHeight > screenH) finalY = (int)y - popupHeight - 10;
-                if (finalX + popupWidth > screenW) finalX = screenW - popupWidth - 10;
-                if (finalY < 0) finalY = 10;
-                if (finalX < 0) finalX = 10;
+                if (isMouseFallback)
+                {
+                    finalX += 15;
+                    finalY += 20;
+                }
+                else
+                {
+                    finalY += 25;
+                }
 
-                SetWindowPos(_hwnd, HWND_TOPMOST, finalX, finalY, popupWidth, popupHeight, SWP_NOACTIVATE | SWP_SHOWWINDOW);
+                // Smart Bounds Checking
+                if (finalX + PopupWidth > monitorInfo.rcWork.Right)
+                    finalX = monitorInfo.rcWork.Right - PopupWidth - 5;
+
+                if (finalX < monitorInfo.rcWork.Left)
+                    finalX = monitorInfo.rcWork.Left + 5;
+
+                // Auto-Flipping if hitting the bottom
+                if (finalY + PopupHeight > monitorInfo.rcWork.Bottom)
+                {
+                    if (isMouseFallback) finalY = (int)y - PopupHeight - 10;
+                    else finalY = (int)y - PopupHeight - 5;
+                }
+
+                if (finalY < monitorInfo.rcWork.Top)
+                    finalY = monitorInfo.rcWork.Top + 5;
+
+                SetWindowPos(_hwnd, HWND_TOPMOST, finalX, finalY, PopupWidth, PopupHeight, SWP_NOACTIVATE | SWP_SHOWWINDOW);
             }
             else
             {
-                // Fix: Move off-screen instead of AppWindow.Hide() to prevent compositor sleep bug
                 SetWindowPos(_hwnd, IntPtr.Zero, -10000, -10000, 0, 0, SWP_NOACTIVATE | SWP_NOSIZE | SWP_NOZORDER);
             }
         }
@@ -167,7 +189,8 @@ public sealed partial class PopupView : Window
     const uint SWP_NOSIZE = 0x0001;
     const uint SWP_NOZORDER = 0x0004;
     const uint SWP_NOACTIVATE = 0x0010;
-    const uint SWP_SHOWWINDOW = 0x0040; // Crucial to force UI wake!
+    const uint SWP_SHOWWINDOW = 0x0040;
+    private const uint MONITOR_DEFAULTTONEAREST = 2;
 
     [LibraryImport("dwmapi.dll")]
     private static partial int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
@@ -188,10 +211,33 @@ public sealed partial class PopupView : Window
     [return: MarshalAs(UnmanagedType.Bool)]
     private static partial bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
 
+    // Modern Multi-Monitor APIs
     [LibraryImport("user32.dll")]
-    private static partial int GetSystemMetrics(int nIndex);
+    private static partial IntPtr MonitorFromPoint(InteropPoint pt, uint dwFlags);
+
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool GetMonitorInfoW(IntPtr hMonitor, ref MONITORINFO lpmi);
 
     public struct InteropPoint { public int X; public int Y; }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct InteropRect
+    {
+        public int Left;
+        public int Top;
+        public int Right;
+        public int Bottom;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct MONITORINFO
+    {
+        public uint cbSize;
+        public InteropRect rcMonitor;
+        public InteropRect rcWork;
+        public uint dwFlags;
+    }
 
     private static void MakeWindowTruePopup(IntPtr hwnd)
     {

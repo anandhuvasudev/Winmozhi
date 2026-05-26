@@ -19,9 +19,9 @@
 
         <Grid x:Name="AppTitleBar" Grid.Row="0" Background="Transparent" />
 
-        <!-- Notification Tray Icon configured to use native Commands -->
+        <!-- Fixed Tray Icon Path for MSIX Apps -->
         <tb:TaskbarIcon x:Name="TrayIcon" 
-                        IconSource="/Assets/WindowIcon.ico"
+                        IconSource="ms-appx:///Assets/WindowIcon.ico"
                         ToolTipText="Winmozhi Manglish Keyboard" 
                         DoubleClickCommand="{x:Bind ViewModel.ShowSettingsCommand}"
                         Visibility="Visible" 
@@ -33,9 +33,7 @@
                             <FontIcon Glyph="&#xE713;" />
                         </MenuFlyoutItem.Icon>
                     </MenuFlyoutItem>
-
                     <MenuFlyoutSeparator />
-
                     <MenuFlyoutItem Text="Quit Winmozhi" Command="{x:Bind ViewModel.ExitAppCommand}">
                         <MenuFlyoutItem.Icon>
                             <FontIcon Glyph="&#xE7E8;" Foreground="#E81123"/>
@@ -48,11 +46,24 @@
         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
             <StackPanel Width="420" Margin="0,12,0,40" Spacing="24" HorizontalAlignment="Center">
 
-                <StackPanel Spacing="16" HorizontalAlignment="Center" Margin="0,0,0,12">
-                    <Image Source="ms-appx:///Assets/Square150x150Logo.png" Width="96" Height="96" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center" />
-                    <StackPanel Spacing="4" HorizontalAlignment="Center">
-                        <TextBlock Text="Winmozhi" Style="{ThemeResource TitleLargeTextBlockStyle}" FontWeight="Bold" HorizontalAlignment="Center"/>
-                        <TextBlock Text="Manglish Keyboard Configuration" Style="{ThemeResource BodyTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" HorizontalAlignment="Center"/>
+                <StackPanel Spacing="8" HorizontalAlignment="Center" Margin="0,0,0,12">
+
+                    <!-- Increased Logo Size from 140 to 220, added negative margin to cut out transparent padding -->
+                    <Image Source="ms-appx:///Assets/Square44x44Logo.altform-unplated_targetsize-256.png" Width="120" Height="120" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,-20,0,-20" />
+
+                    <StackPanel Spacing="-4" HorizontalAlignment="Center">
+                        <!-- Beautiful Handwriting Font -->
+                        <TextBlock Text="Winmozhi" 
+                                   FontFamily="Segoe Script, Brush Script MT, cursive" 
+                                   FontSize="46" 
+                                   FontWeight="Bold" 
+                                   HorizontalAlignment="Center"/>
+
+                        <TextBlock Text="Manglish Keyboard Configuration" 
+                                   Style="{ThemeResource BodyTextBlockStyle}" 
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" 
+                                   HorizontalAlignment="Center" 
+                                   Margin="0,8,0,0"/>
                     </StackPanel>
                 </StackPanel>
 
@@ -242,11 +253,11 @@
                     </Border>
                 </StackPanel>
 
-                <!-- Help & Updates Section -->
+                <!-- Help Section -->
                 <StackPanel Spacing="4">
-                    <TextBlock Text="Help &amp; Updates" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Margin="2,0,0,4"/>
+                    <TextBlock Text="Help" Style="{ThemeResource BodyStrongTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Margin="2,0,0,4"/>
 
-                    <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="8,8,0,0" Padding="16,14">
+                    <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="8" Padding="16,14">
                         <Grid ColumnSpacing="12">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto"/>
@@ -261,25 +272,9 @@
                             <Button Grid.Column="2" Content="View Guide" Click="ShowHowToUse_Click" VerticalAlignment="Center"/>
                         </Grid>
                     </Border>
-
-                    <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1,0,1,1" CornerRadius="0,0,8,8" Padding="16,14">
-                        <Grid ColumnSpacing="12">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <FontIcon Glyph="&#xE895;" FontSize="18" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center"/>
-                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="8,0,0,0">
-                                <TextBlock Text="Check for Updates" Style="{ThemeResource BodyTextBlockStyle}" FontWeight="SemiBold"/>
-                                <TextBlock x:Name="UpdateStatusText" Text="Keep your app up to date." Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Margin="0,2,0,0" TextWrapping="Wrap"/>
-                            </StackPanel>
-                            <Button x:Name="CheckUpdateButton" Grid.Column="2" Content="Check Now" Click="CheckUpdates_Click" VerticalAlignment="Center"/>
-                        </Grid>
-                    </Border>
                 </StackPanel>
 
-                <TextBlock Text="v1.0.0 • Crafted for Malayalam ❤️" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorDisabledBrush}" Margin="0,8,0,0" HorizontalAlignment="Center"/>
+                <TextBlock Text="v1.0.0 • Crafted for Malayalam" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorDisabledBrush}" Margin="0,8,0,0" HorizontalAlignment="Center"/>
             </StackPanel>
         </ScrollViewer>
     </Grid>

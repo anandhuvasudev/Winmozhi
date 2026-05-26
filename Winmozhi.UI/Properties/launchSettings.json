@@ -1,6 +1,9 @@
 {
   "profiles": {
-    "Winmozhi": {
+    "Winmozhi (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "Winmozhi (Unpackaged)": {
       "commandName": "Project",
       "dotnetRunMessages": true
     }

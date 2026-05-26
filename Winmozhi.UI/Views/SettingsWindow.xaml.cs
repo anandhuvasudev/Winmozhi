@@ -1,6 +1,7 @@
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
 using System;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
@@ -81,7 +82,6 @@ public sealed partial class SettingsWindow : Window
                 Winmozhi.Core.Utilities.LocalPreferences.IsFirstRun = false;
                 Winmozhi.Core.Utilities.LocalPreferences.Save();
 
-                // Slight delay to ensure the UI has finished drawing before throwing the dialog
                 await Task.Delay(200);
                 await ShowHowToUseDialogAsync();
             }
@@ -95,74 +95,116 @@ public sealed partial class SettingsWindow : Window
 
     private async Task ShowHowToUseDialogAsync()
     {
-        var stackPanel = new StackPanel { Spacing = 12 };
+        var mainPanel = new StackPanel { Spacing = 20, Margin = new Thickness(0, 10, 0, 0) };
 
-        stackPanel.Children.Add(new TextBlock { Text = "Getting Started", FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, FontSize = 16 });
-        stackPanel.Children.Add(new TextBlock { Text = "1. Type anywhere in Manglish (e.g., 'njan').", TextWrapping = TextWrapping.Wrap });
-        stackPanel.Children.Add(new TextBlock { Text = "2. A popup will instantly appear with Malayalam suggestions.", TextWrapping = TextWrapping.Wrap });
-        stackPanel.Children.Add(new TextBlock { Text = "3. Press Space or Enter to insert the highlighted word.", TextWrapping = TextWrapping.Wrap });
-        stackPanel.Children.Add(new TextBlock { Text = "4. Use Up/Down Arrow keys to choose alternative suggestions.", TextWrapping = TextWrapping.Wrap });
+        // 1. Getting Started Header
+        var header1 = new TextBlock
+        {
+            Text = "Getting Started",
+            Style = (Style)Application.Current.Resources["SubtitleTextBlockStyle"],
+            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold
+        };
+        mainPanel.Children.Add(header1);
 
-        stackPanel.Children.Add(new TextBlock { Text = "Global Shortcut", FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, FontSize = 16, Margin = new Thickness(0, 16, 0, 0) });
-        stackPanel.Children.Add(new TextBlock { Text = "Press Ctrl + Shift + M at any time to temporarily pause or resume Winmozhi across your entire system.", TextWrapping = TextWrapping.Wrap });
+        // 2. Beautiful Numbered Steps with Custom Badges
+        var stepsPanel = new StackPanel { Spacing = 14, Margin = new Thickness(4, 0, 0, 0) };
+        stepsPanel.Children.Add(CreateStepItem("1", "Type anywhere in Manglish (e.g., 'njan')."));
+        stepsPanel.Children.Add(CreateStepItem("2", "A popup will instantly appear with Malayalam suggestions."));
+        stepsPanel.Children.Add(CreateStepItem("3", "Press Space or Enter to insert the highlighted word."));
+        stepsPanel.Children.Add(CreateStepItem("4", "Use the Up and Down arrow keys to choose alternative suggestions."));
+        mainPanel.Children.Add(stepsPanel);
 
+        // 3. Elegant Divider Line
+        var divider = new Border
+        {
+            Height = 1,
+            Background = (SolidColorBrush)Application.Current.Resources["DividerStrokeColorDefaultBrush"],
+            Margin = new Thickness(0, 8, 0, 8)
+        };
+        mainPanel.Children.Add(divider);
+
+        // 4. Global Shortcut Header
+        var header2 = new TextBlock
+        {
+            Text = "Global Shortcut",
+            Style = (Style)Application.Current.Resources["SubtitleTextBlockStyle"],
+            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold
+        };
+        mainPanel.Children.Add(header2);
+
+        // 5. Formatted Text with bold highlighted keys
+        var shortcutDesc = new RichTextBlock { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(4, 0, 0, 0) };
+        var para = new Microsoft.UI.Xaml.Documents.Paragraph();
+
+        para.Inlines.Add(new Microsoft.UI.Xaml.Documents.Run { Text = "Press ", Foreground = (SolidColorBrush)Application.Current.Resources["TextFillColorSecondaryBrush"] });
+
+        para.Inlines.Add(new Microsoft.UI.Xaml.Documents.Run
+        {
+            Text = "Ctrl + Shift + M",
+            FontWeight = Microsoft.UI.Text.FontWeights.Bold,
+            Foreground = (SolidColorBrush)Application.Current.Resources["TextFillColorPrimaryBrush"]
+        });
+
+        para.Inlines.Add(new Microsoft.UI.Xaml.Documents.Run
+        {
+            Text = " at any time to temporarily pause or resume the transliteration engine across your entire system.",
+            Foreground = (SolidColorBrush)Application.Current.Resources["TextFillColorSecondaryBrush"]
+        });
+
+        shortcutDesc.Blocks.Add(para);
+        mainPanel.Children.Add(shortcutDesc);
+
+        // 6. Native Opaque Dialog (No Mica Transparency)
         var dialog = new ContentDialog
         {
-            Title = "Welcome to Winmozhi! 🎉",
-            Content = stackPanel,
-            CloseButtonText = "Got it!",
+            Title = "How to use Winmozhi",
+            Content = mainPanel,
+            CloseButtonText = "Got it",
             DefaultButton = ContentDialogButton.Close,
-            XamlRoot = this.Content.XamlRoot // Required in WinUI 3
+            XamlRoot = this.Content.XamlRoot
         };
 
         await dialog.ShowAsync();
     }
 
-    private async void CheckUpdates_Click(object sender, RoutedEventArgs e)
+    // Fixed CA1822: Marked helper method as static since it doesn't use instance members
+    private static Grid CreateStepItem(string number, string description)
     {
-        CheckUpdateButton.IsEnabled = false;
-        UpdateStatusText.Text = "Checking GitHub...";
+        var grid = new Grid { ColumnSpacing = 16 };
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
-        var (updateAvailable, latestVersion, downloadUrl) = await Winmozhi.Core.Utilities.UpdateService.CheckForUpdatesAsync();
-
-        if (updateAvailable)
+        // Creates a circular badge matching your Windows Accent Color
+        var numBadge = new Border
         {
-            UpdateStatusText.Text = $"Version {latestVersion} is available!";
-            await PromptForUpdateAsync(latestVersion, downloadUrl);
-        }
-        else
-        {
-            UpdateStatusText.Text = "You are on the latest version.";
-        }
-
-        CheckUpdateButton.IsEnabled = true;
-    }
-
-    private async Task PromptForUpdateAsync(string latestVersion, string downloadUrl)
-    {
-        var dialog = new ContentDialog
-        {
-            Title = "Update Available!",
-            Content = $"Winmozhi {latestVersion} is available to download. Would you like to update now? The app will quickly restart.",
-            PrimaryButtonText = "Update Now",
-            CloseButtonText = "Later",
-            DefaultButton = ContentDialogButton.Primary,
-            XamlRoot = this.Content.XamlRoot,
-            Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(200, 30, 30, 30))
+            Background = (SolidColorBrush)Application.Current.Resources["SystemControlBackgroundAccentBrush"],
+            CornerRadius = new CornerRadius(12),
+            Width = 24,
+            Height = 24,
+            Child = new TextBlock
+            {
+                Text = number,
+                Foreground = (SolidColorBrush)Application.Current.Resources["TextOnAccentFillColorPrimaryBrush"],
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+                FontSize = 12,
+                FontWeight = Microsoft.UI.Text.FontWeights.Bold
+            }
         };
+        Grid.SetColumn(numBadge, 0);
 
-        if (Application.Current.RequestedTheme == ApplicationTheme.Light)
-            dialog.Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(220, 245, 245, 245));
-
-        var result = await dialog.ShowAsync();
-
-        if (result == ContentDialogResult.Primary)
+        var descBlock = new TextBlock
         {
-            UpdateStatusText.Text = "Downloading and restarting...";
-            CheckUpdateButton.IsEnabled = false;
+            Text = description,
+            TextWrapping = TextWrapping.Wrap,
+            VerticalAlignment = VerticalAlignment.Center,
+            Foreground = (SolidColorBrush)Application.Current.Resources["TextFillColorSecondaryBrush"]
+        };
+        Grid.SetColumn(descBlock, 1);
 
-            // This triggers the background script and forces the app to close
-            await Winmozhi.Core.Utilities.UpdateService.ApplyUpdateAsync(downloadUrl);
-        }
+        grid.Children.Add(numBadge);
+        grid.Children.Add(descBlock);
+
+        return grid;
     }
 }

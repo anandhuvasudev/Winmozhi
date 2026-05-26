@@ -14,7 +14,8 @@
 
     <Grid Background="Transparent">
         <!-- Rounded corners set to 8px (standard Win11 flyout) -->
-        <Border Background="Transparent"
+        <Border x:Name="RootBorder"
+                Background="Transparent"
                 BorderBrush="{ThemeResource SurfaceStrokeColorFlyoutBrush}"
                 BorderThickness="1"
                 CornerRadius="8"

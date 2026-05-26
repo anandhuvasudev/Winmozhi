@@ -9,15 +9,15 @@
   IgnorableNamespaces="uap rescap systemai">
 
   <Identity
-    Name="add5babd-1c70-4a44-a2f0-0d707eb45418"
-    Publisher="CN=User"
-    Version="1.0.0.0" />
+    Name="AnandhuVasudev.Winmozhi"
+    Publisher="CN=90FD2E70-7FC8-4AAC-9E2D-E6A67803C5B5"
+    Version="1.0.1.0" />
 
-  <mp:PhoneIdentity PhoneProductId="add5babd-1c70-4a44-a2f0-0d707eb45418" PhonePublisherId="00000000-0000-0000-0000-000000000000"/>
+  <mp:PhoneIdentity PhoneProductId="da30d287-427a-46ca-97cd-1f54e2efd19a" PhonePublisherId="00000000-0000-0000-0000-000000000000"/>
 
   <Properties>
-    <DisplayName>Winmozhi.UI</DisplayName>
-    <PublisherDisplayName>User</PublisherDisplayName>
+    <DisplayName>Winmozhi</DisplayName>
+    <PublisherDisplayName>Anandhu Vasudev</PublisherDisplayName>
     <Logo>Assets\StoreLogo.png</Logo>
   </Properties>
 
@@ -35,19 +35,25 @@
       Executable="$targetnametoken$.exe"
       EntryPoint="$targetentrypoint$">
       <uap:VisualElements
-        DisplayName="Winmozhi.UI"
-        Description="Winmozhi.UI"
+        DisplayName="Winmozhi"
+        Description="Manglish to Malayalam Keyboard"
         BackgroundColor="transparent"
         Square150x150Logo="Assets\Square150x150Logo.png"
         Square44x44Logo="Assets\Square44x44Logo.png">
-        <uap:DefaultTile Wide310x150Logo="Assets\Wide310x150Logo.png" />
-        <uap:SplashScreen Image="Assets\SplashScreen.png" />
+        <uap:DefaultTile Wide310x150Logo="Assets\Wide310x150Logo.png" ShortName="Winmozhi"  Square310x310Logo="Assets\LargeTile.png" Square71x71Logo="Assets\SmallTile.png">
+          <uap:ShowNameOnTiles>
+            <uap:ShowOn Tile="square150x150Logo"/>
+            <uap:ShowOn Tile="wide310x150Logo"/>
+            <uap:ShowOn Tile="square310x310Logo"/>
+          </uap:ShowNameOnTiles>
+        </uap:DefaultTile >
+        <uap:LockScreen Notification="badge" BadgeLogo="Assets\BadgeLogo.png"/>
+        <uap:SplashScreen Image="Assets\SplashScreen.png"/>
       </uap:VisualElements>
     </Application>
   </Applications>
 
   <Capabilities>
     <rescap:Capability Name="runFullTrust" />
-    <systemai:Capability Name="systemAIModels"/>
   </Capabilities>
 </Package>

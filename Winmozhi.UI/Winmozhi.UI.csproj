@@ -15,15 +15,79 @@
 		<EnableMsixTooling>true</EnableMsixTooling>
 		<NoWarn>NETSDK1206</NoWarn>
 		<NoWarn>NETSDK1206;CA1416</NoWarn>
-		<WindowsPackageType>None</WindowsPackageType>
+		<WindowsPackageType>MSIX</WindowsPackageType>
+
 		<WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
 		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 		<Nullable>enable</Nullable>
-		<PublishReadyToRun>true</PublishReadyToRun>
+		<PublishReadyToRun>False</PublishReadyToRun>
 		<TieredCompilation>true</TieredCompilation>
 		<ApplicationManifest>app.manifest</ApplicationManifest>
+		<GenerateTemporaryStoreCertificate>True</GenerateTemporaryStoreCertificate>
+		<GenerateAppInstallerFile>False</GenerateAppInstallerFile>
+		<AppxPackageSigningEnabled>False</AppxPackageSigningEnabled>
+		<AppxPackageSigningTimestampDigestAlgorithm>SHA256</AppxPackageSigningTimestampDigestAlgorithm>
+		<AppxAutoIncrementPackageRevision>True</AppxAutoIncrementPackageRevision>
+		<GenerateTestArtifacts>False</GenerateTestArtifacts>
+		<AppxBundle>Never</AppxBundle>
+		<HoursBetweenUpdateChecks>0</HoursBetweenUpdateChecks>
 	</PropertyGroup>
 	<ItemGroup>
+	  <None Remove="Assets\BadgeLogo.scale-100.png" />
+	  <None Remove="Assets\BadgeLogo.scale-125.png" />
+	  <None Remove="Assets\BadgeLogo.scale-150.png" />
+	  <None Remove="Assets\BadgeLogo.scale-200.png" />
+	  <None Remove="Assets\BadgeLogo.scale-400.png" />
+	  <None Remove="Assets\LargeTile.scale-100.png" />
+	  <None Remove="Assets\LargeTile.scale-125.png" />
+	  <None Remove="Assets\LargeTile.scale-150.png" />
+	  <None Remove="Assets\LargeTile.scale-200.png" />
+	  <None Remove="Assets\LargeTile.scale-400.png" />
+	  <None Remove="Assets\SmallTile.scale-100.png" />
+	  <None Remove="Assets\SmallTile.scale-125.png" />
+	  <None Remove="Assets\SmallTile.scale-150.png" />
+	  <None Remove="Assets\SmallTile.scale-200.png" />
+	  <None Remove="Assets\SmallTile.scale-400.png" />
+	  <None Remove="Assets\SplashScreen.scale-100.png" />
+	  <None Remove="Assets\SplashScreen.scale-125.png" />
+	  <None Remove="Assets\SplashScreen.scale-150.png" />
+	  <None Remove="Assets\SplashScreen.scale-200.png" />
+	  <None Remove="Assets\SplashScreen.scale-400.png" />
+	  <None Remove="Assets\Square150x150Logo.scale-100.png" />
+	  <None Remove="Assets\Square150x150Logo.scale-125.png" />
+	  <None Remove="Assets\Square150x150Logo.scale-150.png" />
+	  <None Remove="Assets\Square150x150Logo.scale-200.png" />
+	  <None Remove="Assets\Square150x150Logo.scale-400.png" />
+	  <None Remove="Assets\Square44x44Logo.altform-lightunplated_targetsize-16.png" />
+	  <None Remove="Assets\Square44x44Logo.altform-lightunplated_targetsize-24.png" />
+	  <None Remove="Assets\Square44x44Logo.altform-lightunplated_targetsize-256.png" />
+	  <None Remove="Assets\Square44x44Logo.altform-lightunplated_targetsize-32.png" />
+	  <None Remove="Assets\Square44x44Logo.altform-lightunplated_targetsize-48.png" />
+	  <None Remove="Assets\Square44x44Logo.altform-unplated_targetsize-16.png" />
+	  <None Remove="Assets\Square44x44Logo.altform-unplated_targetsize-24.png" />
+	  <None Remove="Assets\Square44x44Logo.altform-unplated_targetsize-256.png" />
+	  <None Remove="Assets\Square44x44Logo.altform-unplated_targetsize-32.png" />
+	  <None Remove="Assets\Square44x44Logo.altform-unplated_targetsize-48.png" />
+	  <None Remove="Assets\Square44x44Logo.scale-100.png" />
+	  <None Remove="Assets\Square44x44Logo.scale-125.png" />
+	  <None Remove="Assets\Square44x44Logo.scale-150.png" />
+	  <None Remove="Assets\Square44x44Logo.scale-200.png" />
+	  <None Remove="Assets\Square44x44Logo.scale-400.png" />
+	  <None Remove="Assets\Square44x44Logo.targetsize-16.png" />
+	  <None Remove="Assets\Square44x44Logo.targetsize-24.png" />
+	  <None Remove="Assets\Square44x44Logo.targetsize-256.png" />
+	  <None Remove="Assets\Square44x44Logo.targetsize-32.png" />
+	  <None Remove="Assets\Square44x44Logo.targetsize-48.png" />
+	  <None Remove="Assets\StoreLogo.scale-100.png" />
+	  <None Remove="Assets\StoreLogo.scale-125.png" />
+	  <None Remove="Assets\StoreLogo.scale-150.png" />
+	  <None Remove="Assets\StoreLogo.scale-200.png" />
+	  <None Remove="Assets\StoreLogo.scale-400.png" />
+	  <None Remove="Assets\Wide310x150Logo.scale-100.png" />
+	  <None Remove="Assets\Wide310x150Logo.scale-125.png" />
+	  <None Remove="Assets\Wide310x150Logo.scale-150.png" />
+	  <None Remove="Assets\Wide310x150Logo.scale-200.png" />
+	  <None Remove="Assets\Wide310x150Logo.scale-400.png" />
 	  <None Remove="Views\PopupView.xaml" />
 	</ItemGroup>
 
