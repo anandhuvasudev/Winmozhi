@@ -19,7 +19,7 @@
 
 <br/>
 
-### ✨ Native • Fast • Open Source • Beautiful
+### ✨ Native • Fast • Source-Available • Beautiful
 
 </div>
 
