@@ -8,6 +8,8 @@
 
 *Type Malayalam effortlessly across your entire system — fast, native, elegant, and intelligent.*
 
+🌐 **[Official Website: winmozhi.com](https://winmozhi.com/)**
+
 <br/>
 
 ![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011-0078D4?style=for-the-badge&logo=windows)
@@ -37,9 +39,9 @@ Whether you're chatting on WhatsApp, writing code, designing in Photoshop, or ed
 
 <div align="center">
 
-<img src="demo.gif" alt="Winmozhi Typing Popup Demo" width="45%"/>
+<img src="docs/assets/demo.gif" alt="Winmozhi Typing Popup Demo" width="45%"/>
 &nbsp; &nbsp; &nbsp;
-<img src="demo2.gif" alt="Winmozhi Settings App Demo" width="21.8%"/>
+<img src="docs/assets/demo2.gif" alt="Winmozhi Settings App Demo" width="21.8%"/>
 
 <br/>
 <i>Left: Intelligent System-Wide Typing Popup | Right: Native WinUI 3 Settings</i>
