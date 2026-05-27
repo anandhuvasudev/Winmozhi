@@ -20,16 +20,42 @@ public partial class App : Microsoft.UI.Xaml.Application
 
     // PRODUCTION FIX: Prevent multiple instances of the app
     private static Mutex? _mutex;
+    // ADDED: Event handle for cross-instance communication
+    private static EventWaitHandle? _showSettingsEvent;
 
     public App()
     {
-        // 1. Check if Winmozhi is already running. If yes, exit silently.
+        // 1. Check if Winmozhi is already running.
         _mutex = new Mutex(true, "Winmozhi_Global_Single_Instance", out bool isNewInstance);
         if (!isNewInstance)
         {
+            // Tell the FIRST instance to show the settings window!
+            if (EventWaitHandle.TryOpenExisting("Winmozhi_Show_Settings_Event", out var existingEvent))
+            {
+                existingEvent.Set(); // Send the signal
+            }
             Environment.Exit(0);
             return;
         }
+
+        // 1.5 Create the event listener so FUTURE instances can wake this one up
+        _showSettingsEvent = new EventWaitHandle(false, EventResetMode.AutoReset, "Winmozhi_Show_Settings_Event");
+        var dispatcher = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
+
+        Task.Run(() =>
+        {
+            while (true)
+            {
+                // This thread waits quietly in the background until the 2nd instance signals it
+                _showSettingsEvent.WaitOne();
+
+                // Switch back to the UI thread to safely open the Settings window
+                dispatcher?.TryEnqueue(() =>
+                {
+                    _settingsWindow?.ShowSettings();
+                });
+            }
+        });
 
         this.InitializeComponent();
 
