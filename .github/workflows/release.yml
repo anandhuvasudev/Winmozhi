@@ -3,7 +3,7 @@ name: Build Winmozhi Installers
 on:
   workflow_dispatch: # Allows you to manually trigger the workflow from GitHub
 
-# ADDED: Explicitly grant the workflow permission to write to repository contents
+# Explicitly grant the workflow permission to write to repository contents
 permissions:
   contents: write
 
@@ -90,7 +90,7 @@ jobs:
           Winmozhi-Update-${{ matrix.arch }}.zip
           installer_output/Winmozhi_Installer_${{ matrix.arch }}.exe
 
-  # ADDED: New job to gather the artifacts and push them to a GitHub Release
+  # New job to gather the artifacts and push them to a GitHub Release
   release:
     name: Publish to GitHub Releases
     needs: build
@@ -111,5 +111,5 @@ jobs:
         prerelease: false
         generate_release_notes: true
         files: |
-          artifacts/Winmozhi-Builds-win-x64/*
-          artifacts/Winmozhi-Builds-win-arm64/*
+          artifacts/Winmozhi-Builds-win-x64/*.exe
+          artifacts/Winmozhi-Builds-win-arm64/*.exe
