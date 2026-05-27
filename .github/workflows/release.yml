@@ -1,7 +1,10 @@
 name: Build Winmozhi Installers
 
 on:
-  workflow_dispatch: # Allows you to manually trigger the workflow from GitHub
+  workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -11,77 +14,99 @@ jobs:
         arch: [win-x64, win-arm64]
 
     steps:
-    - name: Checkout Code
-      uses: actions/checkout@v4
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
-    - name: Setup .NET 10
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: '10.0.x'
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
 
-    - name: Restore Dependencies
-      run: dotnet restore Winmozhi.UI/Winmozhi.UI.csproj -r ${{ matrix.arch }}
+      - name: Restore Dependencies
+        run: dotnet restore Winmozhi.UI/Winmozhi.UI.csproj -r ${{ matrix.arch }}
 
-    - name: Publish App (${{ matrix.arch }})
-      # Added WindowsPackageType=None (highly recommended for WinUI 3 unpackaged apps)
-      run: >
-        dotnet publish Winmozhi.UI/Winmozhi.UI.csproj 
-        -c Release 
-        -r ${{ matrix.arch }} 
-        --self-contained true 
-        -p:PublishReadyToRun=true 
-        -p:WindowsAppSDKSelfContained=true 
-        -p:WindowsPackageType=None
-        -o ./publish_output_${{ matrix.arch }}
+      - name: Publish App (${{ matrix.arch }})
+        run: >
+          dotnet publish Winmozhi.UI/Winmozhi.UI.csproj
+          -c Release
+          -r ${{ matrix.arch }}
+          --self-contained true
+          -p:PublishReadyToRun=true
+          -p:WindowsAppSDKSelfContained=true
+          -p:WindowsPackageType=None
+          -o ./publish_output_${{ matrix.arch }}
 
-    - name: Zip for Auto-Updater (${{ matrix.arch }})
-      run: Compress-Archive -Path ./publish_output_${{ matrix.arch }}/* -DestinationPath Winmozhi-Update-${{ matrix.arch }}.zip
+      - name: Zip for Auto-Updater (${{ matrix.arch }})
+        run: Compress-Archive -Path ./publish_output_${{ matrix.arch }}/* -DestinationPath Winmozhi-Update-${{ matrix.arch }}.zip
 
-    - name: Create Installer Script (${{ matrix.arch }})
-      run: |
-        $arch = "${{ matrix.arch }}"
-        # Tell Inno Setup to properly structure the internal registry/folders based on architecture
-        $innoArch = if ($arch -eq 'win-arm64') { 'arm64' } else { 'x64' }
-        
-        $iss = @"
-        [Setup]
-        AppName=Winmozhi
-        AppVersion=1.0.${{ github.run_number }}
-        DefaultDirName={autopf}\Winmozhi
-        DefaultGroupName=Winmozhi
-        OutputDir=.\installer_output
-        OutputBaseFilename=Winmozhi_Installer_$arch
-        Compression=lzma2
-        SolidCompression=yes
-        PrivilegesRequired=lowest
-        SetupIconFile=.\Winmozhi.UI\Assets\WindowIcon.ico
-        UninstallDisplayIcon={app}\Winmozhi.UI.exe
-        ArchitecturesAllowed=$innoArch
-        ArchitecturesInstallIn64BitMode=$innoArch
+      - name: Create Installer Script (${{ matrix.arch }})
+        run: |
+          $arch = "${{ matrix.arch }}"
+          $innoArch = if ($arch -eq 'win-arm64') { 'arm64' } else { 'x64' }
 
-        [Files]
-        Source: ".\publish_output_$arch\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+          $iss = @"
+          [Setup]
+          AppName=Winmozhi
+          AppVersion=1.0.${{ github.run_number }}
+          DefaultDirName={autopf}\Winmozhi
+          DefaultGroupName=Winmozhi
+          OutputDir=.\installer_output
+          OutputBaseFilename=Winmozhi_Installer_$arch
+          Compression=lzma2
+          SolidCompression=yes
+          PrivilegesRequired=lowest
+          SetupIconFile=.\Winmozhi.UI\Assets\WindowIcon.ico
+          UninstallDisplayIcon={app}\Winmozhi.UI.exe
+          ArchitecturesAllowed=$innoArch
+          ArchitecturesInstallIn64BitMode=$innoArch
+          ChangesEnvironment=yes
+          
+          [Files]
+          Source: ".\publish_output_$arch\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
-        [Icons]
-        Name: "{autoprograms}\Winmozhi"; Filename: "{app}\Winmozhi.UI.exe"
-        Name: "{autodesktop}\Winmozhi"; Filename: "{app}\Winmozhi.UI.exe"; Tasks: desktopicon
+          [Icons]
+          Name: "{autoprograms}\Winmozhi"; Filename: "{app}\Winmozhi.UI.exe"
+          Name: "{autodesktop}\Winmozhi"; Filename: "{app}\Winmozhi.UI.exe"; Tasks: desktopicon
 
-        [Tasks]
-        Name: "desktopicon"; Description: "Create a &desktop icon"; GroupDescription: "Additional icons:"
+          [Tasks]
+          Name: "desktopicon"; Description: "Create a &desktop icon"; GroupDescription: "Additional icons:"
 
-        [Run]
-        ; THE FIX: WorkingDir: "{app}" guarantees WinUI 3 finds resources.pri on first launch
-        Filename: "{app}\Winmozhi.UI.exe"; Description: "Launch Winmozhi"; Flags: nowait postinstall skipifsilent; WorkingDir: "{app}"
-        "@
-        Out-File -FilePath installer_$arch.iss -InputObject $iss -Encoding UTF8
+          [Run]
+          Filename: "{app}\Winmozhi.UI.exe"; Description: "Launch Winmozhi"; Flags: nowait postinstall skipifsilent shellexec; WorkingDir: "{app}"
+          "@
+          Out-File -FilePath installer_$arch.iss -InputObject $iss -Encoding UTF8
 
-    - name: Compile Installer EXE (${{ matrix.arch }})
-      run: '& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer_${{ matrix.arch }}.iss'
+      - name: Compile Installer EXE (${{ matrix.arch }})
+        run: '& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer_${{ matrix.arch }}.iss'
 
-    - name: Upload Artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: Winmozhi-Builds-${{ matrix.arch }}
-        path: |
-          Winmozhi-Update-${{ matrix.arch }}.zip
-          installer_output/Winmozhi_Installer_${{ matrix.arch }}.exe
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Winmozhi-Builds-${{ matrix.arch }}
+          path: |
+            Winmozhi-Update-${{ matrix.arch }}.zip
+            installer_output/Winmozhi_Installer_${{ matrix.arch }}.exe
+
+  release:
+    name: Publish to GitHub Releases
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Build Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create Release and Upload Assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          name: "Winmozhi v1.0.${{ github.run_number }}"
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          files: |
+            artifacts/Winmozhi-Builds-win-x64/installer_output/Winmozhi_Installer_win-x64.exe
+            artifacts/Winmozhi-Builds-win-arm64/installer_output/Winmozhi_Installer_win-arm64.exe
+            artifacts/Winmozhi-Builds-win-x64/Winmozhi-Update-win-x64.zip
+            artifacts/Winmozhi-Builds-win-arm64/Winmozhi-Update-win-arm64.zip
