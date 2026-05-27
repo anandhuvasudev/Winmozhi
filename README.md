@@ -15,7 +15,7 @@
 ![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011-0078D4?style=for-the-badge&logo=windows)
 ![Framework](https://img.shields.io/badge/Framework-WinUI%203%20%7C%20.NET%2010-512BD4?style=for-the-badge&logo=dotnet)
 ![Architecture](https://img.shields.io/badge/Architecture-x64%20%7C%20ARM64-FF8C00?style=for-the-badge)
-![License](https://img.shields.io/badge/License-MIT-2EA043?style=for-the-badge)
+![License](https://img.shields.io/badge/License-All%20Rights%20Reserved-red?style=for-the-badge)
 
 <br/>
 
@@ -148,15 +148,25 @@ We would love your help to make Winmozhi even better! Here is how you can contri
 
 ---
 
-## 📜 License & Copyright
-Winmozhi is open-source software, free for the community.
+## 📜 License, Copyright & Trademark
 
-**MIT License**
+**Winmozhi™** is a protected trademark of Anandhu Vasudev. 
+
+**Source-Available License (All Rights Reserved)**
 Copyright (c) 2026 Anandhu Vasudev
 
-Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software.
+The source code of Winmozhi is made publicly available for transparency, educational purposes, and personal inspection. However, it is **not** licensed under a permissive open-source license.
 
-See the `LICENSE` file for more details.
+**✅ What you CAN do:**
+* You may view and inspect the source code.
+* You may compile the software from source for your own personal, non-commercial use.
+
+**🚫 What you CANNOT do:**
+* You may **not** copy, modify, redistribute, sublicense, or sell copies of this software, its source code, or any part of it.
+* You may **not** create derivative works, modified versions, clones, or competing software based on this repository.
+* The name "Winmozhi", the "വിൻമൊഴി" branding, the logo, and all related visual assets are strictly protected trademarks and may not be used in any other projects without explicit written permission.
+
+By accessing this repository, you agree to these terms. For commercial licensing inquiries or special permissions, please contact the author.
 
 <div align="center">
 Made with ❤️ for the Malayalam community.
