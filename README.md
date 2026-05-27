@@ -39,9 +39,9 @@ Whether you're chatting on WhatsApp, writing code, designing in Photoshop, or ed
 
 <div align="center">
 
-<img src="docs/assets/demo.gif" alt="Winmozhi Typing Popup Demo" width="45%"/>
+<img src="demo.gif" alt="Winmozhi Typing Popup Demo" width="45%"/>
 &nbsp; &nbsp; &nbsp;
-<img src="docs/assets/demo2.gif" alt="Winmozhi Settings App Demo" width="21.8%"/>
+<img src="demo2.gif" alt="Winmozhi Settings App Demo" width="21.8%"/>
 
 <br/>
 <i>Left: Intelligent System-Wide Typing Popup | Right: Native WinUI 3 Settings</i>
