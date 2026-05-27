@@ -10,10 +10,10 @@
 
 <br/>
 
-![Platform](https://img.shields.io/badge/Platform-Windows%2011-0078D4?style=for-the-badge&logo=windows)
-![Framework](https://img.shields.io/badge/Framework-WinUI%203%20%7C%20.NET%2010-8A2BE2?style=for-the-badge)
+![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011-0078D4?style=for-the-badge&logo=windows)
+![Framework](https://img.shields.io/badge/Framework-WinUI%203%20%7C%20.NET%2010-512BD4?style=for-the-badge&logo=dotnet)
+![Architecture](https://img.shields.io/badge/Architecture-x64%20%7C%20ARM64-FF8C00?style=for-the-badge)
 ![License](https://img.shields.io/badge/License-MIT-2EA043?style=for-the-badge)
-![Status](https://img.shields.io/badge/Status-Active%20Development-orange?style=for-the-badge)
 
 <br/>
 
@@ -23,336 +23,139 @@
 
 ---
 
-# 🌟 About Winmozhi
+## 🌟 About Winmozhi
 
-**Winmozhi** is a blazing-fast, system-wide Malayalam transliteration keyboard for Windows that converts **Manglish → Malayalam** in real time.
+**Winmozhi** is a blazing-fast, system-wide Malayalam transliteration keyboard for Windows that converts **Manglish → Malayalam** in real time. 
 
-Built natively using **WinUI 3** and **.NET 10**, Winmozhi integrates deeply with Windows and delivers a smooth, lightweight, and modern typing experience that feels like a natural part of the operating system.
+Unlike traditional input method editors (IMEs) that feel clunky, Winmozhi is built natively using **WinUI 3** and **.NET 10**. It utilizes low-level Win32 keyboard hooks to integrate deeply with Windows, delivering a smooth, lightweight, and modern typing experience that feels like a natural part of the operating system.
 
-Whether you're chatting, coding, designing, editing videos, or writing documents — Winmozhi works everywhere.
-
----
-
-# ✨ Features
-
-## 🚀 Hybrid Transliteration Engine
-
-Winmozhi combines multiple intelligent systems to provide extremely accurate Malayalam typing.
-
-### Core Technologies
-
-- ⚡ Ultra-fast zero-allocation parser
-- 📚 Offline Trie-based prediction engine
-- 🌐 Google Input Tools fallback engine
-- 🧠 Smart word ranking & adaptive prediction
-- 🔄 Real-time transliteration pipeline
+Whether you're chatting on WhatsApp, writing code, designing in Photoshop, or editing videos in Premiere Pro — Winmozhi works everywhere.
 
 ---
 
-## 🧠 Intelligent Fuzzy Matching
+## 📸 Demo
 
+<div align="center">
+
+<img src="demo.gif" alt="Winmozhi Typing Popup Demo" width="45%"/>
+&nbsp; &nbsp; &nbsp;
+<img src="demo2.gif" alt="Winmozhi Settings App Demo" width="21.8%"/>
+
+<br/>
+<i>Left: Intelligent System-Wide Typing Popup | Right: Native WinUI 3 Settings</i>
+
+</div>
+
+---
+
+## ✨ Features
+
+### 🚀 Hybrid Transliteration Engine
+Winmozhi combines multiple intelligent systems to provide extremely accurate Malayalam typing instantly.
+- ⚡ **Zero-allocation Parser:** Translates keystrokes in sub-milliseconds.
+- 📚 **Offline Engine:** Trie-based prediction using a bundled Manglish-Malayalam corpus.
+- 🌐 **Online Engine:** Seamless fallback to Google Input Tools API for complex words.
+
+### 🧠 Intelligent Fuzzy Matching
 Winmozhi automatically understands phonetic variations and typing mistakes.
 
 | You Type | Winmozhi Understands |
 |:---|:---|
-| `sukham` | സുഖം |
-| `sugham` | സുഖം |
-| `njan` | ഞാൻ |
-| `ente` | എൻ്റെ |
+| `sukham` or `sugham` | സുഖം |
+| `njan` or `njaan` | ഞാൻ |
 | `malayalm` | മലയാളം |
 
-### Powered By
+### 🔤 Legacy Design Software Support (FML/ML)
+Winmozhi supports direct typing into legacy Malayalam font workflows, making it the perfect tool for designers and editors.
+- Output mapped for **FML** & **ML** legacy fonts.
+- Tested specifically for Adobe Photoshop, Premiere Pro, PageMaker, and legacy DTP software.
 
-- Phonetic normalization
-- Levenshtein distance matching
-- Adaptive ranking logic
+### 🎨 Beautiful Native Windows UI
+Designed specifically for **Windows 11** with a clean and modern aesthetic.
+- 🌈 **Acrylic & Mica Materials** for native transparency.
+- 🪟 **Floating Popup** that intelligently tracks your cursor, even across multiple monitors.
+- 🎛️ **Fully Customizable:** Adjust popup colors, text scaling, and opacity.
 
----
-
-## ⚡ System-Wide Hotkey
-
+### ⚡ System-Wide Hotkey
 Instantly enable or disable transliteration anywhere using:
+> **<kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>M</kbd>**
+
+---
+
+## 🚀 Installation (For Users)
+
+Winmozhi uses an automated CI/CD pipeline to generate ready-to-use installers for both Intel/AMD (x64) and Snapdragon (ARM64) devices.
+
+1. Go to the [Releases page](../../releases/latest).
+2. Download the `.exe` installer for your system:
+   - `Winmozhi_Installer_x64.exe` (Most standard PCs)
+   - `Winmozhi_Installer_arm64.exe` (Snapdragon/ARM PCs)
+3. Run the installer and launch Winmozhi!
+
+*(Note: Because Winmozhi is open-source and not signed with an expensive EV certificate, Windows SmartScreen may show a blue warning. Click **"More Info"** -> **"Run Anyway"**).*
+
+---
+
+## 🕹️ How to Use
+
+1. **Launch:** Ensure the `മ` icon is visible in your Windows System Tray.
+2. **Type:** Open any app (Word, Browser, Photoshop) and start typing in Manglish (e.g., `namaskaram`).
+3. **Popup:** A floating popup will appear near your text cursor with Malayalam suggestions.
+4. **Insert:** Press `<Space>` to insert the highlighted word, or use `↑` `↓` arrows to navigate alternative suggestions.
+5. **Pause:** Press `Ctrl + Shift + M` to pause the engine and type in normal English.
+
+---
+
+## 🛠️ For Developers & Open Source Contributors
+
+Winmozhi is architected for maximum performance and readability using modern C# features. We welcome contributors!
+
+### 🏗️ Project Structure
+The solution is divided into three heavily decoupled layers:
+* 📦 **`Winmozhi.Core`**: Contains all business logic, the Trie prediction engine, API clients, SQLite history database, and FML/ML converters. *(No UI code here).*
+* 🪝 **`Winmozhi.Hooks`**: Manages the low-level `WH_KEYBOARD_LL` Win32 API hooks to intercept keystrokes system-wide.
+* 🖥️ **`Winmozhi.UI`**: The WinUI 3 frontend containing the MVVM architecture (CommunityToolkit.Mvvm), system tray integration, and Settings/Popup windows.
+
+### ⚙️ Prerequisites
+To build Winmozhi locally, you will need:
+- **Visual Studio 2022** (v17.8 or later)
+- **.NET 10 SDK**
+- **Windows App SDK** & **WinUI 3** Workload enabled in Visual Studio Installer
+- *Optional: Inno Setup 6 (if you want to compile the installer locally)*
+
+### 🚀 Build Instructions
+1. Clone the repository:
+   ```bash
+   git clone [https://github.com/anandhuvasudev/Winmozhi.git](https://github.com/anandhuvasudev/Winmozhi.git)
+   ```
+2. Open the solution in **Visual Studio**.
+3. Set `Winmozhi.UI` as the Startup Project.
+4. **Important:** Ensure the build architecture is set to `x64` or `ARM64` (`Any CPU` is not supported by WinUI 3).
+5. Press `F5` to build and run!
+
+### 📦 Unpackaged Deployment
+To bypass strict Windows MSIX container restrictions and allow our global keyboard hooks to run seamlessly, Winmozhi is built as an **Unpackaged WinUI 3 app** (`WindowsPackageType=None`). The deployment is handled via Inno Setup instead of the Microsoft Store.
+
+---
+
+## 🤝 Contributing
+We would love your help to make Winmozhi even better! Here is how you can contribute:
+* **Expand the Dictionary:** Help us improve offline predictions by adding missing words to `Winmozhi.Core/Engines/ManglishCorpus.csv`.
+* **Submit Pull Requests:** Found a bug? Created a new feature? Fork the repo and submit a PR!
+* **Report Issues:** If you experience crashes or weird behavior, please open an issue with the steps to reproduce it.
+
+---
+
+## 📜 License & Copyright
+Winmozhi is open-source software, free for the community.
+
+**MIT License**
+Copyright (c) 2026 Anandhu Vasudev
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software.
+
+See the `LICENSE` file for more details.
 
 <div align="center">
-
-## <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>M</kbd>
-
-</div>
-
-Perfect for switching between English and Malayalam while typing.
-
----
-
-## 🎨 Beautiful Native Windows UI
-
-Designed specifically for **Windows 11** with a clean and modern native aesthetic.
-
-### UI Highlights
-
-- 🌈 Acrylic & Mica materials
-- ✨ Smooth animations
-- 🪟 Floating suggestion popup
-- 🎯 Cursor-following predictions
-- 🌙 Light & dark theme support
-- 🔍 Adjustable font scaling
-- 🎛️ Opacity customization
-
----
-
-## 🔤 Legacy Malayalam Font Support
-
-Winmozhi supports direct typing into legacy Malayalam font workflows.
-
-### Compatible With
-
-- Adobe Photoshop
-- Adobe Premiere Pro
-- PageMaker
-- Legacy DTP software
-- FML / ML font mappings
-
-Perfect for professional Malayalam publishing workflows.
-
----
-
-## 📖 Personal Dictionary & Learning
-
-Winmozhi learns from your typing habits over time.
-
-### Smart Learning Features
-
-- 💾 Local SQLite-based storage
-- 🧠 Personalized predictions
-- 📈 Frequency-based ranking
-- 🔒 Fully offline learning
-- ⚡ Faster suggestions over time
-
-Your data stays completely on your device.
-
----
-
-# 📸 Screenshots
-
-<div align="center">
-
-| Settings Window | Suggestion Popup |
-|:---:|:---:|
-| <img src="https://via.placeholder.com/500x300.png?text=Settings+Window" width="450"/> | <img src="https://via.placeholder.com/500x300.png?text=Suggestion+Popup" width="450"/> |
-
-</div>
-
-<br/>
-
-> Replace the placeholder screenshots above with actual application screenshots.
-
----
-
-# 🚀 Installation
-
-## Option 1 — Direct Download *(Coming Soon)*
-
-1. Visit the Releases page
-2. Download:
-   - `Winmozhi_Installer.exe`
-   - `.msix` package
-3. Install & launch 🎉
-
-Winmozhi will automatically appear in your system tray.
-
----
-
-## Option 2 — Build From Source
-
-### Requirements
-
-- Visual Studio 2022 (17.8+)
-- .NET 10 SDK
-- Windows App SDK
-- WinUI 3 workload
-
-### Clone Repository
-
-```bash
-git clone https://github.com/anandhuvasudev/Winmozhi.git
-```
-
-### Build Steps
-
-```bash
-# Open the solution
-Winmozhi.slnx
-
-# Select architecture
-x64 / ARM64
-
-# Set startup project
-Winmozhi.UI
-
-# Run project
-F5
-```
-
----
-
-# 🕹️ How to Use
-
-## 1️⃣ Launch Winmozhi
-
-The `മ` icon will appear in your system tray.
-
----
-
-## 2️⃣ Open Any Application
-
-Winmozhi works seamlessly in:
-
-- Browsers
-- Microsoft Word
-- WhatsApp
-- VS Code
-- Photoshop
-- Premiere Pro
-- Notepad
-- Discord
-- And almost everywhere on Windows
-
----
-
-## 3️⃣ Start Typing Manglish
-
-Example:
-
-```text
-njan malayali aanu
-```
-
-Suggestions will automatically appear near your text cursor.
-
----
-
-## 4️⃣ Select Suggestions
-
-| Key | Action |
-|---|---|
-| `Space` | Insert top suggestion |
-| `Enter` | Confirm exact word |
-| `↑ ↓` | Navigate suggestions |
-
----
-
-## 5️⃣ Toggle Transliteration
-
-Press:
-
-```text
-Ctrl + Shift + M
-```
-
-to instantly switch back to normal English typing.
-
----
-
-# ⚙️ Architecture & Tech Stack
-
-| Component | Technology |
-|---|---|
-| Frontend | WinUI 3 |
-| Backend | C# 13/14 + .NET 10 |
-| Architecture | MVVM |
-| Database | SQLite (`sqlite-net-pcl`) |
-| Prediction Engine | Trie + DFS |
-| Parsing Engine | `ReadOnlySpan<char>` |
-| Keyboard Hooks | Win32 `WH_KEYBOARD_LL` |
-
----
-
-# 🧩 Performance Focus
-
-Winmozhi is engineered for speed and responsiveness.
-
-### Optimizations
-
-- ⚡ Sub-millisecond keystroke processing
-- 🧠 Cached prediction pipeline
-- 📦 Zero-allocation parsing
-- 🪶 Lightweight rendering
-- 🔌 Native Win32 hooks
-
-The result is an incredibly smooth typing experience without interrupting your workflow.
-
----
-
-# 🤝 Contributing
-
-Winmozhi is proudly **Open Source ❤️**
-
-Contributions are always welcome.
-
----
-
-## Ways to Contribute
-
-### 📚 Improve the Dictionary
-
-Expand the offline corpus by editing:
-
-```text
-ManglishCorpus.csv
-```
-
-### 🐞 Fix Bugs
-
-Check the Issues section and help solve problems.
-
-### 💡 Suggest Features
-
-Open an issue or start a discussion.
-
----
-
-## Contribution Workflow
-
-```bash
-# Fork the repository
-
-# Create a feature branch
-git checkout -b feature/AmazingFeature
-
-# Commit your changes
-git commit -m "Add AmazingFeature"
-
-# Push changes
-git push origin feature/AmazingFeature
-
-# Open a Pull Request 🚀
-```
-
----
-
-# 📜 License
-
-Distributed under the **MIT License**.
-
-See the `LICENSE` file for more information.
-
----
-
-# 🙏 Acknowledgements
-
-Special thanks to:
-
-- **H.NotifyIcon** — system tray implementation
-- **Google Input Tools** — transliteration fallback
-- The amazing Malayalam open-source community ❤️
-
----
-
-<div align="center">
-
-# 💙 Winmozhi
-
-### Bringing beautiful Malayalam typing to Windows.
-
 Made with ❤️ for the Malayalam community.
-
 </div>
