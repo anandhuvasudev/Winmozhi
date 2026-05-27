@@ -59,7 +59,8 @@ jobs:
           UninstallDisplayIcon={app}\Winmozhi.UI.exe
           ArchitecturesAllowed=$innoArch
           ArchitecturesInstallIn64BitMode=$innoArch
-
+          ChangesEnvironment=yes
+          
           [Files]
           Source: ".\publish_output_$arch\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
@@ -71,7 +72,7 @@ jobs:
           Name: "desktopicon"; Description: "Create a &desktop icon"; GroupDescription: "Additional icons:"
 
           [Run]
-          Filename: "{app}\Winmozhi.UI.exe"; Description: "Launch Winmozhi"; Flags: nowait postinstall skipifsilent; WorkingDir: "{app}"
+          Filename: "{app}\Winmozhi.UI.exe"; Description: "Launch Winmozhi"; Flags: nowait postinstall skipifsilent shellexec; WorkingDir: "{app}"
           "@
           Out-File -FilePath installer_$arch.iss -InputObject $iss -Encoding UTF8
 
