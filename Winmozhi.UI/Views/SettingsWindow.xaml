@@ -21,7 +21,6 @@
 
         <!-- Fixed Tray Icon Path for MSIX Apps -->
         <tb:TaskbarIcon x:Name="TrayIcon" 
-                        IconSource="ms-appx:///Assets/WindowIcon.ico"
                         ToolTipText="Winmozhi Manglish Keyboard" 
                         DoubleClickCommand="{x:Bind ViewModel.ShowSettingsCommand}"
                         Visibility="Visible" 

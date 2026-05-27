@@ -95,7 +95,7 @@ public partial class SettingsViewModel : ObservableObject
             });
         };
 
-        // Initialize Startup Task status correctly for MSIX apps
+        // Initialize Startup Task status correctly for MSIX apps and Unpackaged apps
         _ = InitStartupStateAsync();
     }
 
@@ -108,13 +108,36 @@ public partial class SettingsViewModel : ObservableObject
     partial void OnPopupFontSizeChanged(int value) { LocalPreferences.PopupFontSize = value; LocalPreferences.Save(); }
     partial void OnPopupOpacityChanged(double value) { LocalPreferences.PopupOpacity = value; LocalPreferences.Save(); OnPropertyChanged(nameof(PopupOpacityPercentage)); }
 
-    // FIX: Removed illegal Registry writes. Using official WinRT API.
+    // Helper to detect if running as a Store App (Packaged) or GitHub Release (Unpackaged)
+    private static bool IsRunningAsPackaged()
+    {
+        try
+        {
+            // This throws an exception if the app is unpackaged
+            return Windows.ApplicationModel.Package.Current != null;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     private async Task InitStartupStateAsync()
     {
         try
         {
-            var startupTask = await Windows.ApplicationModel.StartupTask.GetAsync("WinmozhiStartup");
-            _runAtStartup = startupTask.State == Windows.ApplicationModel.StartupTaskState.Enabled;
+            if (IsRunningAsPackaged())
+            {
+                // Packaged: Use native WinRT API (Required for Microsoft Store)
+                var startupTask = await Windows.ApplicationModel.StartupTask.GetAsync("WinmozhiStartup");
+                _runAtStartup = startupTask.State == Windows.ApplicationModel.StartupTaskState.Enabled;
+            }
+            else
+            {
+                // Unpackaged: Use Windows Registry
+                using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run", false);
+                _runAtStartup = key?.GetValue("WinmozhiStartup") != null;
+            }
             OnPropertyChanged(nameof(RunAtStartup));
         }
         catch { }
@@ -124,9 +147,30 @@ public partial class SettingsViewModel : ObservableObject
     {
         try
         {
-            var startupTask = await Windows.ApplicationModel.StartupTask.GetAsync("WinmozhiStartup");
-            if (enable) await startupTask.RequestEnableAsync();
-            else startupTask.Disable();
+            if (IsRunningAsPackaged())
+            {
+                // Packaged: Use native WinRT API
+                var startupTask = await Windows.ApplicationModel.StartupTask.GetAsync("WinmozhiStartup");
+                if (enable) await startupTask.RequestEnableAsync();
+                else startupTask.Disable();
+            }
+            else
+            {
+                // Unpackaged: Use Windows Registry
+                using var key = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run");
+                if (enable)
+                {
+                    string exePath = System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName ?? string.Empty;
+                    if (!string.IsNullOrEmpty(exePath))
+                    {
+                        key.SetValue("WinmozhiStartup", $"\"{exePath}\"");
+                    }
+                }
+                else
+                {
+                    key.DeleteValue("WinmozhiStartup", false);
+                }
+            }
         }
         catch { }
     }

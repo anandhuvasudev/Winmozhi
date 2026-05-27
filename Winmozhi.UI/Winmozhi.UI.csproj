@@ -121,6 +121,13 @@
 	</ItemGroup>
 
 	<ItemGroup>
+		<!-- Ensure assets are copied to output for Unpackaged mode -->
+		<Content Update="Assets\**\*">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</Content>
+	</ItemGroup>
+
+	<ItemGroup>
 		<Page Update="Views\PopupView.xaml">
 			<Generator>MSBuild:Compile</Generator>
 		</Page>

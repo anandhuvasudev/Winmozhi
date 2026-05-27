@@ -45,7 +45,24 @@ public sealed partial class SettingsWindow : Window
         try
         {
             string iconPath = System.IO.Path.Combine(System.AppContext.BaseDirectory, "Assets", "WindowIcon.ico");
-            if (System.IO.File.Exists(iconPath)) AppWindow.SetIcon(iconPath);
+
+            // 1. AppWindow.SetIcon always expects a physical path, so this works for both modes
+            if (System.IO.File.Exists(iconPath))
+            {
+                AppWindow.SetIcon(iconPath);
+            }
+
+            // 2. Tray Icon requires different URIs based on how the app is running
+            if (IsRunningAsPackaged())
+            {
+                // Packaged apps (Store / Debug) strictly prefer ms-appx:///
+                TrayIcon.IconSource = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri("ms-appx:///Assets/WindowIcon.ico"));
+            }
+            else if (System.IO.File.Exists(iconPath))
+            {
+                // Unpackaged apps (Inno Setup) require the absolute local file path
+                TrayIcon.IconSource = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri(iconPath));
+            }
         }
         catch { }
 
@@ -55,6 +72,18 @@ public sealed partial class SettingsWindow : Window
             ShowWindow(_hwnd, SW_HIDE);
             Winmozhi.Core.Utilities.MemoryOptimizer.TrimMemory();
         };
+    }
+
+    private static bool IsRunningAsPackaged()
+    {
+        try
+        {
+            return Windows.ApplicationModel.Package.Current != null;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     public void ShowSettings() => WakeUpAndShowSettings();
