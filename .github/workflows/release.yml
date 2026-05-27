@@ -3,6 +3,10 @@ name: Build Winmozhi Installers
 on:
   workflow_dispatch: # Allows you to manually trigger the workflow from GitHub
 
+# ADDED: Explicitly grant the workflow permission to write to repository contents
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: windows-latest
@@ -85,3 +89,27 @@ jobs:
         path: |
           Winmozhi-Update-${{ matrix.arch }}.zip
           installer_output/Winmozhi_Installer_${{ matrix.arch }}.exe
+
+  # ADDED: New job to gather the artifacts and push them to a GitHub Release
+  release:
+    name: Publish to GitHub Releases
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+    - name: Download Build Artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: artifacts
+
+    - name: Create Release and Upload Assets
+      uses: softprops/action-gh-release@v2
+      with:
+        # Dynamically matches the version number set in your Inno Setup script
+        tag_name: v1.0.${{ github.run_number }}
+        name: "Winmozhi v1.0.${{ github.run_number }}"
+        draft: false
+        prerelease: false
+        generate_release_notes: true
+        files: |
+          artifacts/Winmozhi-Builds-win-x64/*
+          artifacts/Winmozhi-Builds-win-arm64/*
