@@ -17,6 +17,7 @@ public class SqliteHistoryDatabase : IHistoryDatabase
         if (_database != null) return;
 
         // Save the DB in the standard Windows AppData/Local folder
+        // This is perfectly safe and writable for MSIX Store Apps!
         var appData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
         var dbPath = Path.Combine(appData, "Winmozhi", "history.db3");
 
@@ -76,6 +77,7 @@ public class SqliteHistoryDatabase : IHistoryDatabase
 
         return results;
     }
+
     public async Task ClearHistoryAsync()
     {
         await InitializeAsync();
@@ -84,5 +86,4 @@ public class SqliteHistoryDatabase : IHistoryDatabase
             await _database.DeleteAllAsync<UserDictionaryEntry>();
         }
     }
-
 }

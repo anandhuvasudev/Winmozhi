@@ -19,7 +19,6 @@ public sealed partial class PopupView : Window
     private readonly IKeyboardHookService _hookService;
     private readonly IntPtr _hwnd;
 
-    // Restored to original size
     private const int PopupWidth = 180;
     private const int PopupHeight = 260;
 
@@ -103,10 +102,7 @@ public sealed partial class PopupView : Window
             int index = ViewModel.Suggestions.IndexOf(selectedWord);
             if (index >= 0)
             {
-                // Update the selection and force the ViewModel to insert it
                 ViewModel.SelectedIndex = index;
-
-                // We pass a space " " so that typing continues naturally after insertion
                 ViewModel.InsertCurrentSelection(" ");
             }
         }
@@ -150,9 +146,15 @@ public sealed partial class PopupView : Window
                     isMouseFallback = true;
                 }
 
-                // Multi-Monitor Intelligence
                 var point = new InteropPoint { X = (int)x, Y = (int)y };
                 IntPtr hMonitor = MonitorFromPoint(point, MONITOR_DEFAULTTONEAREST);
+
+                // FIX: Retrieve Monitor DPI to correctly scale the popup window natively.
+                GetDpiForMonitor(hMonitor, 0, out uint dpiX, out uint _);
+                double scaleFactor = dpiX / 96.0;
+
+                int scaledWidth = (int)(PopupWidth * scaleFactor);
+                int scaledHeight = (int)(PopupHeight * scaleFactor);
 
                 var monitorInfo = new MONITORINFO { cbSize = (uint)Marshal.SizeOf<MONITORINFO>() };
                 GetMonitorInfoW(hMonitor, ref monitorInfo);
@@ -162,32 +164,30 @@ public sealed partial class PopupView : Window
 
                 if (isMouseFallback)
                 {
-                    finalX += 15;
-                    finalY += 20;
+                    finalX += (int)(15 * scaleFactor);
+                    finalY += (int)(20 * scaleFactor);
                 }
                 else
                 {
-                    finalY += 25;
+                    finalY += (int)(25 * scaleFactor);
                 }
 
-                // Smart Bounds Checking
-                if (finalX + PopupWidth > monitorInfo.rcWork.Right)
-                    finalX = monitorInfo.rcWork.Right - PopupWidth - 5;
+                if (finalX + scaledWidth > monitorInfo.rcWork.Right)
+                    finalX = monitorInfo.rcWork.Right - scaledWidth - (int)(5 * scaleFactor);
 
                 if (finalX < monitorInfo.rcWork.Left)
-                    finalX = monitorInfo.rcWork.Left + 5;
+                    finalX = monitorInfo.rcWork.Left + (int)(5 * scaleFactor);
 
-                // Auto-Flipping if hitting the bottom
-                if (finalY + PopupHeight > monitorInfo.rcWork.Bottom)
+                if (finalY + scaledHeight > monitorInfo.rcWork.Bottom)
                 {
-                    if (isMouseFallback) finalY = (int)y - PopupHeight - 10;
-                    else finalY = (int)y - PopupHeight - 5;
+                    if (isMouseFallback) finalY = (int)y - scaledHeight - (int)(10 * scaleFactor);
+                    else finalY = (int)y - scaledHeight - (int)(5 * scaleFactor);
                 }
 
                 if (finalY < monitorInfo.rcWork.Top)
-                    finalY = monitorInfo.rcWork.Top + 5;
+                    finalY = monitorInfo.rcWork.Top + (int)(5 * scaleFactor);
 
-                SetWindowPos(_hwnd, HWND_TOPMOST, finalX, finalY, PopupWidth, PopupHeight, SWP_NOACTIVATE | SWP_SHOWWINDOW);
+                SetWindowPos(_hwnd, HWND_TOPMOST, finalX, finalY, scaledWidth, scaledHeight, SWP_NOACTIVATE | SWP_SHOWWINDOW);
             }
             else
             {
@@ -227,13 +227,16 @@ public sealed partial class PopupView : Window
     [return: MarshalAs(UnmanagedType.Bool)]
     private static partial bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
 
-    // Modern Multi-Monitor APIs
     [LibraryImport("user32.dll")]
     private static partial IntPtr MonitorFromPoint(InteropPoint pt, uint dwFlags);
 
     [LibraryImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static partial bool GetMonitorInfoW(IntPtr hMonitor, ref MONITORINFO lpmi);
+
+    // FIX: Import SHCore for DPI scaling mapping
+    [LibraryImport("shcore.dll")]
+    private static partial int GetDpiForMonitor(IntPtr hmonitor, int dpiType, out uint dpiX, out uint dpiY);
 
     public struct InteropPoint { public int X; public int Y; }
 

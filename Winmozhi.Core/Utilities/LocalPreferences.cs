@@ -13,7 +13,7 @@ public static class LocalPreferences
     // ── Feature Toggles ──────────────────────────────────────────────────────
     public static bool IsFirstRun { get; set; } = true; // NEW FLAG
     public static bool IsHookEnabled { get; set; } = true;
-    public static bool IsOnlineEngineEnabled { get; set; } = false;
+    public static bool IsOnlineEngineEnabled { get; set; } = true;
     public static bool IsFmlFontModeEnabled { get; set; } = false;
     public static bool IsMlFontModeEnabled { get; set; } = false;
 

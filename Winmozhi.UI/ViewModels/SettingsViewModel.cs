@@ -2,7 +2,6 @@
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media;
-using Microsoft.Win32;
 using System;
 using System.IO;
 using System.Threading.Tasks;
@@ -32,10 +31,19 @@ public partial class SettingsViewModel : ObservableObject
         set { if (PopupFontSize != (int)value) { PopupFontSize = (int)value; OnPropertyChanged(nameof(PopupFontSizeDouble)); } }
     }
 
+    private bool _runAtStartup;
     public bool RunAtStartup
     {
-        get => GetRunAtStartup();
-        set { SetRunAtStartup(value); OnPropertyChanged(nameof(RunAtStartup)); }
+        get => _runAtStartup;
+        set
+        {
+            if (_runAtStartup != value)
+            {
+                _runAtStartup = value;
+                SetRunAtStartupAsync(value);
+                OnPropertyChanged(nameof(RunAtStartup));
+            }
+        }
     }
 
     public Windows.UI.Color PopupBackgroundColorColor
@@ -74,10 +82,8 @@ public partial class SettingsViewModel : ObservableObject
         PopupFontSize = LocalPreferences.PopupFontSize;
         PopupOpacity = LocalPreferences.PopupOpacity;
 
-        // Sync initial state
         _hookService.IsTransliterationEnabled = IsEnabled;
 
-        // Listen for Global Hotkey updates so the UI switch stays synced!
         _hookService.OnStateChanged += (s, isEnabled) =>
         {
             var dispatcher = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
@@ -88,15 +94,12 @@ public partial class SettingsViewModel : ObservableObject
                 LocalPreferences.Save();
             });
         };
+
+        // Initialize Startup Task status correctly for MSIX apps
+        _ = InitStartupStateAsync();
     }
 
-    partial void OnIsEnabledChanged(bool value)
-    {
-        LocalPreferences.IsHookEnabled = value;
-        LocalPreferences.Save();
-        _hookService.IsTransliterationEnabled = value;
-    }
-
+    partial void OnIsEnabledChanged(bool value) { LocalPreferences.IsHookEnabled = value; LocalPreferences.Save(); _hookService.IsTransliterationEnabled = value; }
     partial void OnIsOnlineEngineEnabledChanged(bool value) { LocalPreferences.IsOnlineEngineEnabled = value; LocalPreferences.Save(); }
     partial void OnIsFmlFontModeEnabledChanged(bool value) { LocalPreferences.IsFmlFontModeEnabled = value; if (value && IsMlFontModeEnabled) IsMlFontModeEnabled = false; LocalPreferences.Save(); }
     partial void OnIsMlFontModeEnabledChanged(bool value) { LocalPreferences.IsMlFontModeEnabled = value; if (value && IsFmlFontModeEnabled) IsFmlFontModeEnabled = false; LocalPreferences.Save(); }
@@ -105,11 +108,28 @@ public partial class SettingsViewModel : ObservableObject
     partial void OnPopupFontSizeChanged(int value) { LocalPreferences.PopupFontSize = value; LocalPreferences.Save(); }
     partial void OnPopupOpacityChanged(double value) { LocalPreferences.PopupOpacity = value; LocalPreferences.Save(); OnPropertyChanged(nameof(PopupOpacityPercentage)); }
 
-    private const string StartupKey = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Run";
-    private const string AppName = "Winmozhi";
+    // FIX: Removed illegal Registry writes. Using official WinRT API.
+    private async Task InitStartupStateAsync()
+    {
+        try
+        {
+            var startupTask = await Windows.ApplicationModel.StartupTask.GetAsync("WinmozhiStartup");
+            _runAtStartup = startupTask.State == Windows.ApplicationModel.StartupTaskState.Enabled;
+            OnPropertyChanged(nameof(RunAtStartup));
+        }
+        catch { }
+    }
 
-    private static bool GetRunAtStartup() { try { using var key = Registry.CurrentUser.OpenSubKey(StartupKey); return key?.GetValue(AppName) != null; } catch { return false; } }
-    private static void SetRunAtStartup(bool enable) { try { using var key = Registry.CurrentUser.OpenSubKey(StartupKey, true); if (enable) { var exePath = Environment.ProcessPath; if (!string.IsNullOrEmpty(exePath)) key?.SetValue(AppName, $"\"{exePath}\""); } else key?.DeleteValue(AppName, false); } catch { } }
+    private static async void SetRunAtStartupAsync(bool enable)
+    {
+        try
+        {
+            var startupTask = await Windows.ApplicationModel.StartupTask.GetAsync("WinmozhiStartup");
+            if (enable) await startupTask.RequestEnableAsync();
+            else startupTask.Disable();
+        }
+        catch { }
+    }
 
     [RelayCommand]
     private async Task ClearHistoryAsync()
