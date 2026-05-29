@@ -86,6 +86,14 @@ Instantly enable or disable transliteration anywhere using:
 
 ## 🚀 Installation (For Users)
 
+### Option 1: Microsoft Store (Recommended)
+The easiest and safest way to install Winmozhi. Getting it from the Microsoft Store ensures you automatically receive the latest background updates without manually downloading new versions!
+
+<a href="https://apps.microsoft.com/store/detail/9PDWMRDZ3PB0?cid=DevShareMCLPCS" target="_blank">
+  <img src="store.png" alt="Get it from Microsoft Store" width="200"/>
+</a>
+
+### Option 2: Direct Download (GitHub Releases)
 Winmozhi uses an automated CI/CD pipeline to generate ready-to-use installers for both Intel/AMD (x64) and Snapdragon (ARM64) devices.
 
 1. Go to the [Releases page](../../releases/latest).
@@ -94,7 +102,7 @@ Winmozhi uses an automated CI/CD pipeline to generate ready-to-use installers fo
    - `Winmozhi_Installer_arm64.exe` (Snapdragon/ARM PCs)
 3. Run the installer and launch Winmozhi!
 
-*(Note: Because Winmozhi is open-source and not signed with an expensive EV certificate, Windows SmartScreen may show a blue warning. Click **"More Info"** -> **"Run Anyway"**).*
+*(Note: Because the direct GitHub download is not signed with an expensive EV certificate, Windows SmartScreen may show a blue warning. Click **"More Info"** -> **"Run Anyway"**).*
 
 ---
 
