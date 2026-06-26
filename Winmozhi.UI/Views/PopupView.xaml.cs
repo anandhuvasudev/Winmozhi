@@ -19,6 +19,10 @@ public sealed partial class PopupView : Window
     private readonly IKeyboardHookService _hookService;
     private readonly IntPtr _hwnd;
 
+    // 1. CACHE VARIABLE
+    private SolidColorBrush? _cachedTextBrush;
+    private bool _isAnchored = false;
+
     private const int PopupWidth = 180;
     private const int PopupHeight = 260;
 
@@ -59,12 +63,22 @@ public sealed partial class PopupView : Window
         ApplyStoredStyles();
         ViewModel.PropertyChanged += ViewModel_PropertyChanged;
 
-        LocalPreferences.PreferencesChanged += () =>
+        LocalPreferences.PreferencesChanged += OnPreferencesChanged;
+
+        // FIX: Prevent Memory Leaks if the window is ever destroyed
+        this.Closed += (s, e) =>
         {
-            this.DispatcherQueue.TryEnqueue(() => ApplyStoredStyles());
+            LocalPreferences.PreferencesChanged -= OnPreferencesChanged;
+            ViewModel.PropertyChanged -= ViewModel_PropertyChanged;
         };
     }
 
+    private void OnPreferencesChanged()
+    {
+        this.DispatcherQueue.TryEnqueue(() => ApplyStoredStyles());
+    }
+
+    // 2. UPDATED ApplyStoredStyles METHOD
     private void ApplyStoredStyles()
     {
         try
@@ -75,7 +89,8 @@ public sealed partial class PopupView : Window
             if (TryParseColor(LocalPreferences.PopupBackgroundColor, out var bgColor))
                 RootBorder.Background = new SolidColorBrush(Windows.UI.Color.FromArgb(alpha, bgColor.R, bgColor.G, bgColor.B));
             else
-                RootBorder.Background = new SolidColorBrush(Windows.UI.Color.FromArgb(alpha, 26, 26, 26));
+                // Changed fallback from 26, 26, 26 to 0, 0, 0 (Pure Black)
+                RootBorder.Background = new SolidColorBrush(Windows.UI.Color.FromArgb(alpha, 0, 0, 0));
 
             if (TryParseColor(LocalPreferences.PopupTextColor, out var textColor))
                 CurrentManglishText.Foreground = new SolidColorBrush(textColor);
@@ -88,12 +103,15 @@ public sealed partial class PopupView : Window
         catch { }
     }
 
+    // 3. UPDATED LIST VIEW EVENT
     private void SuggestionsListView_ContainerContentChanging(ListViewBase _, ContainerContentChangingEventArgs args)
     {
         if (args.ItemContainer.ContentTemplateRoot is TextBlock textBlock)
         {
-            if (TryParseColor(LocalPreferences.PopupTextColor, out var color))
-                textBlock.Foreground = new SolidColorBrush(color);
+            // USE THE CACHED BRUSH (Zero Memory Allocation!)
+            if (_cachedTextBrush != null)
+                textBlock.Foreground = _cachedTextBrush;
+
             textBlock.FontSize = LocalPreferences.PopupFontSize;
         }
     }
@@ -138,6 +156,10 @@ public sealed partial class PopupView : Window
         {
             if (ViewModel.IsVisible)
             {
+                // FIX: ANCHORING - Only calculate position when the popup first appears!
+                // This stops the app from spamming Win32 Graphic APIs on every single letter typed.
+                if (_isAnchored) return;
+
                 var (x, y) = _hookService.GetCaretPosition();
                 bool isMouseFallback = false;
 
@@ -191,10 +213,13 @@ public sealed partial class PopupView : Window
                     finalY = monitorInfo.rcWork.Top + (int)(5 * scaleFactor);
 
                 SetWindowPos(_hwnd, HWND_TOPMOST, finalX, finalY, scaledWidth, scaledHeight, SWP_NOACTIVATE | SWP_SHOWWINDOW);
+
+                _isAnchored = true; // Lock the position!
             }
             else
             {
                 SetWindowPos(_hwnd, IntPtr.Zero, -10000, -10000, 0, 0, SWP_NOACTIVATE | SWP_NOSIZE | SWP_NOZORDER);
+                _isAnchored = false; // Reset anchor when popup hides
             }
         }
     }

@@ -18,8 +18,10 @@ public partial class PopupViewModel : ObservableObject, IDisposable
     private readonly IKeyboardHookService _hookService;
     private readonly IHistoryDatabase _historyDatabase;
     private readonly DispatcherQueue _dispatcher;
-
     private CancellationTokenSource? _typingCts;
+
+    // RACE-CONDITION FIX: This tracks the word instantly, bypassing the UI thread delay.
+    private string _syncManglish = string.Empty;
 
     [ObservableProperty] public partial string CurrentManglish { get; set; }
     [ObservableProperty] public partial bool IsVisible { get; set; }
@@ -27,10 +29,7 @@ public partial class PopupViewModel : ObservableObject, IDisposable
 
     public ObservableCollection<string> Suggestions { get; } = [];
 
-    public PopupViewModel(
-        ITransliterationEngine engine,
-        IKeyboardHookService hookService,
-        IHistoryDatabase historyDatabase)
+    public PopupViewModel(ITransliterationEngine engine, IKeyboardHookService hookService, IHistoryDatabase historyDatabase)
     {
         _engine = engine;
         _hookService = hookService;
@@ -51,7 +50,6 @@ public partial class PopupViewModel : ObservableObject, IDisposable
         _hookService.OnWordTyped -= HookService_OnWordTyped;
         _hookService.OnInsertRequested -= HookService_OnInsertRequested;
         _hookService.OnSelectionChangedRequested -= HookService_OnSelectionChangedRequested;
-
         _typingCts?.Cancel();
         _typingCts?.Dispose();
         GC.SuppressFinalize(this);
@@ -62,10 +60,7 @@ public partial class PopupViewModel : ObservableObject, IDisposable
         _dispatcher.TryEnqueue(() =>
         {
             if (Suggestions.Count == 0) return;
-            int currentIndex = SelectedIndex;
-            if (currentIndex < 0 || currentIndex >= Suggestions.Count) currentIndex = 0;
-            int newIndex = currentIndex + direction;
-
+            int newIndex = SelectedIndex + direction;
             if (newIndex < 0) newIndex = Suggestions.Count - 1;
             else if (newIndex >= Suggestions.Count) newIndex = 0;
             SelectedIndex = newIndex;
@@ -74,11 +69,13 @@ public partial class PopupViewModel : ObservableObject, IDisposable
 
     private async void HookService_OnWordTyped(object? sender, string word)
     {
-        // Cancel previous request to stop network spam
         _typingCts?.Cancel();
         _typingCts?.Dispose();
         _typingCts = new CancellationTokenSource();
         var token = _typingCts.Token;
+
+        // Instantly save the word so Spacebar knows what to replace!
+        _syncManglish = word;
 
         _dispatcher.TryEnqueue(() =>
         {
@@ -92,7 +89,6 @@ public partial class PopupViewModel : ObservableObject, IDisposable
                 {
                     IsVisible = false;
                     _hookService.IsPopupVisible = false;
-                    Winmozhi.Core.Utilities.MemoryOptimizer.TrimMemory();
                 }
             }
         });
@@ -101,8 +97,9 @@ public partial class PopupViewModel : ObservableObject, IDisposable
 
         try
         {
-            // FIX: Task.Run forces the SQLite Database lookup onto a background thread.
-            // This instantly frees the Windows Keyboard Hook, removing all typing lag!
+            // Yielding back to the Keyboard Hook immediately so your keyboard doesn't lag
+            await Task.Delay(35, token).ConfigureAwait(false);
+
             var instantResults = await Task.Run(async () =>
             {
                 return (await _engine.GetInstantSuggestionsAsync(word, token).ConfigureAwait(false)).ToList();
@@ -116,10 +113,8 @@ public partial class PopupViewModel : ObservableObject, IDisposable
                 ApplySuggestions(instantResults, preserveSelection: false);
             });
 
-            // Wait 150ms BEFORE calling the API to prevent network lag
             await Task.Delay(150, token).ConfigureAwait(false);
 
-            // FIX: Run network parsing on background thread
             var onlineResults = await Task.Run(async () =>
             {
                 return (await _engine.GetOnlineSuggestionsAsync(word, token).ConfigureAwait(false)).ToList();
@@ -135,20 +130,18 @@ public partial class PopupViewModel : ObservableObject, IDisposable
                 ApplySuggestions(merged, preserveSelection: true);
             });
         }
-        catch (OperationCanceledException) { /* Ignored, user is typing fast */ }
+        catch (OperationCanceledException) { }
     }
 
-    private void HookService_OnInsertRequested(object? _, string trailingText)
-    {
-        InsertCurrentSelection(trailingText);
-    }
+    private void HookService_OnInsertRequested(object? _, string trailingText) => InsertCurrentSelection(trailingText);
 
     public void InsertCurrentSelection(string trailingText)
     {
-        // FIX: Cancel background tasks instantly when space/enter is pressed so the popup doesn't randomly reappear
         _typingCts?.Cancel();
 
-        string manglish = CurrentManglish;
+        // Grab the instantly-tracked word instead of waiting for the UI string
+        string manglish = _syncManglish;
+        _syncManglish = string.Empty;
 
         _dispatcher.TryEnqueue(() =>
         {
@@ -160,6 +153,8 @@ public partial class PopupViewModel : ObservableObject, IDisposable
 
             string malayalamWord;
 
+            // Only use the suggestions list if the UI had time to catch up. 
+            // If the user burst-typed, the smart parser will handle it!
             if (SelectedIndex >= 0 && SelectedIndex < Suggestions.Count && CurrentManglish == manglish)
             {
                 malayalamWord = Suggestions[SelectedIndex];
@@ -167,20 +162,30 @@ public partial class PopupViewModel : ObservableObject, IDisposable
             else
             {
                 malayalamWord = Winmozhi.Core.Engines.SimpleMozhiParser.Parse(manglish);
-                if (string.IsNullOrWhiteSpace(malayalamWord)) malayalamWord = manglish;
             }
+
+            if (string.IsNullOrWhiteSpace(malayalamWord)) malayalamWord = manglish;
 
             _ = _historyDatabase.UpdateWordFrequencyAsync(manglish, malayalamWord);
 
             bool fmlEnabled = Winmozhi.Core.Utilities.LocalPreferences.IsFmlFontModeEnabled;
             bool mlEnabled = Winmozhi.Core.Utilities.LocalPreferences.IsMlFontModeEnabled;
-            string processName = GetForegroundProcessName();
-            bool isPhotoshop = processName.Contains("photoshop", StringComparison.OrdinalIgnoreCase);
 
-            if (fmlEnabled || (mlEnabled && isPhotoshop))
-                malayalamWord = Winmozhi.Core.Engines.FmlConverter.ConvertToFml(malayalamWord);
-            else if (mlEnabled)
-                malayalamWord = Winmozhi.Core.Engines.FmlConverter.ConvertToMl(malayalamWord);
+            if (fmlEnabled || mlEnabled)
+            {
+                if (fmlEnabled)
+                {
+                    malayalamWord = Winmozhi.Core.Engines.FmlConverter.ConvertToFml(malayalamWord);
+                }
+                else if (mlEnabled)
+                {
+                    string processName = GetForegroundProcessName();
+                    if (processName.Contains("photoshop", StringComparison.OrdinalIgnoreCase))
+                        malayalamWord = Winmozhi.Core.Engines.FmlConverter.ConvertToFml(malayalamWord);
+                    else
+                        malayalamWord = Winmozhi.Core.Engines.FmlConverter.ConvertToMl(malayalamWord);
+                }
+            }
 
             _hookService.ReplaceWord(manglish.Length, malayalamWord, trailingText);
 
@@ -188,20 +193,18 @@ public partial class PopupViewModel : ObservableObject, IDisposable
             IsVisible = false;
             _hookService.IsPopupVisible = false;
             CurrentManglish = string.Empty;
-
-            Winmozhi.Core.Utilities.MemoryOptimizer.TrimMemory();
         });
     }
 
     private static async Task<List<string>> MergeSuggestionsAsync(List<string> instant, List<string> online, string originalManglish)
     {
-        var result = new List<string>();
+        var result = new List<string>(7);
 
         if (instant.Count > 1) result.Add(instant[0]);
 
         foreach (var word in online)
         {
-            if (result.Count >= 4) break;
+            if (result.Count >= 7) break;
             if (!result.Contains(word, StringComparer.OrdinalIgnoreCase)) result.Add(word);
         }
 
@@ -212,8 +215,6 @@ public partial class PopupViewModel : ObservableObject, IDisposable
 
     private void ApplySuggestions(IList<string> suggestions, bool preserveSelection)
     {
-        // FIX: If the new suggestions are exactly the same as the old ones, DO NOT redraw the UI.
-        // This stops the UI from flickering and heavily reduces UI thread lag.
         if (Suggestions.SequenceEqual(suggestions)) return;
 
         string? highlighted = preserveSelection && SelectedIndex >= 0 && SelectedIndex < Suggestions.Count
@@ -246,10 +247,7 @@ public partial class PopupViewModel : ObservableObject, IDisposable
             using var process = Process.GetProcessById((int)processId);
             return process.ProcessName ?? string.Empty;
         }
-        catch
-        {
-            return string.Empty;
-        }
+        catch { return string.Empty; }
     }
 
     [LibraryImport("user32.dll")]

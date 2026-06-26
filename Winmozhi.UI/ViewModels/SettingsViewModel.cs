@@ -48,7 +48,7 @@ public partial class SettingsViewModel : ObservableObject
 
     public Windows.UI.Color PopupBackgroundColorColor
     {
-        get => HexToColor(PopupBackgroundColor, Windows.UI.Color.FromArgb(255, 26, 26, 26));
+        get => HexToColor(PopupBackgroundColor, Windows.UI.Color.FromArgb(255, 0, 0, 0));
         set => PopupBackgroundColor = ColorToHex(value);
     }
     public SolidColorBrush PopupBackgroundColorBrush => new(PopupBackgroundColorColor);

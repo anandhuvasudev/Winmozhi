@@ -18,7 +18,7 @@ public partial class KeyboardHookService : IKeyboardHookService
     private readonly Lock _wordLock = new();
 
     private const int VK_CONTROL = 0x11;
-    private const int VK_MENU = 0x12; // Alt Key
+    private const int VK_MENU = 0x12;
     private const int VK_LWIN = 0x5B;
     private const int VK_RWIN = 0x5C;
     private const int VK_SHIFT = 0x10;
@@ -105,16 +105,10 @@ public partial class KeyboardHookService : IKeyboardHookService
         }
 
         if (!IsTransliterationEnabled) return NativeMethods.CallNextHookEx(_hookId, nCode, wParam, lParam);
+        if ((kbdStruct.flags & 0x10) != 0) return NativeMethods.CallNextHookEx(_hookId, nCode, wParam, lParam);
 
-        // Ignore injected keys from our own ReplaceWord method
-        if ((kbdStruct.flags & 0x10) != 0)
-            return NativeMethods.CallNextHookEx(_hookId, nCode, wParam, lParam);
-
-        // Modifier keys shouldn't clear the buffer by themselves (just pressing Shift/Ctrl doesn't mean context is lost)
         bool isModifierKey = key is VK_SHIFT or VK_CONTROL or VK_MENU or VK_LWIN or VK_RWIN or >= 0xA0 and <= 0xA5 or VK_CAPITAL;
 
-        // FIX: If a system shortcut is pressed (Ctrl+Backspace, Ctrl+A, Alt+Tab, etc.)
-        // We MUST clear the internal memory because the user is doing something outside of typing a normal word.
         if (isCtrlDown || isAltDown || isWinDown)
         {
             if (!isModifierKey)
@@ -141,14 +135,15 @@ public partial class KeyboardHookService : IKeyboardHookService
         {
             switch (key)
             {
-                case 0x09: // Tab
-                case 0x20: // Space
+                case 0x09:
+                case 0x20:
                     using (_wordLock.EnterScope()) { _currentWord.Clear(); }
                     _isPopupVisible = false;
+                    // Fired synchronously to guarantee chronological order!
                     OnInsertRequested?.Invoke(this, key == 0x20 ? " " : string.Empty);
                     OnWordTyped?.Invoke(this, string.Empty);
                     return (IntPtr)1;
-                case 0x0D: // Enter
+                case 0x0D:
                     if (_isPopupVisible)
                     {
                         using (_wordLock.EnterScope()) { _currentWord.Clear(); }
@@ -158,19 +153,19 @@ public partial class KeyboardHookService : IKeyboardHookService
                         return (IntPtr)1;
                     }
                     break;
-                case 0x1B: // Escape
+                case 0x1B:
                     if (_isPopupVisible)
                     {
                         using (_wordLock.EnterScope()) { _currentWord.Clear(); }
                         _isPopupVisible = false;
                         OnWordTyped?.Invoke(this, string.Empty);
-                        return (IntPtr)1; // Consume the escape key so it doesn't close other menus
+                        return (IntPtr)1;
                     }
                     break;
-                case 0x28: // Down Arrow
+                case 0x28:
                     if (_isPopupVisible) { OnSelectionChangedRequested?.Invoke(this, 1); return (IntPtr)1; }
                     break;
-                case 0x26: // Up Arrow
+                case 0x26:
                     if (_isPopupVisible) { OnSelectionChangedRequested?.Invoke(this, -1); return (IntPtr)1; }
                     break;
             }
@@ -180,14 +175,14 @@ public partial class KeyboardHookService : IKeyboardHookService
 
         using (_wordLock.EnterScope())
         {
-            if (key is >= 0x41 and <= 0x5A) // A-Z keys
+            if (key is >= 0x41 and <= 0x5A)
             {
                 bool isCapsOn = (GetKeyState(VK_CAPITAL) & 0x0001) != 0;
                 bool useUpper = isShiftDown ^ isCapsOn;
                 _currentWord.Append(useUpper ? (char)key : char.ToLowerInvariant((char)key));
                 wordSnapshot = _currentWord.ToString();
             }
-            else if (key == 0x08) // Normal Backspace
+            else if (key == 0x08)
             {
                 if (_currentWord.Length > 0)
                 {
@@ -203,7 +198,6 @@ public partial class KeyboardHookService : IKeyboardHookService
             }
             else if (!isModifierKey)
             {
-                // Any other key (Arrow keys, Delete, Numbers, Punctuation) forces a context reset
                 if (_currentWord.Length > 0 || _isPopupVisible)
                 {
                     _currentWord.Clear();
@@ -213,7 +207,11 @@ public partial class KeyboardHookService : IKeyboardHookService
             }
         }
 
-        if (wordSnapshot is not null) OnWordTyped?.Invoke(this, wordSnapshot);
+        if (wordSnapshot is not null)
+        {
+            OnWordTyped?.Invoke(this, wordSnapshot);
+        }
+
         return NativeMethods.CallNextHookEx(_hookId, nCode, wParam, lParam);
     }
 
@@ -249,6 +247,7 @@ public partial class KeyboardHookService : IKeyboardHookService
 
         using (_wordLock.EnterScope()) { _currentWord.Clear(); }
         _isPopupVisible = false;
+
         OnWordTyped?.Invoke(this, string.Empty);
     }
 

@@ -18,10 +18,10 @@ public static class LocalPreferences
     public static bool IsMlFontModeEnabled { get; set; } = false;
 
     // ── Popup Styling ────────────────────────────────────────────────────────
-    public static string PopupBackgroundColor { get; set; } = GetSystemAccentColorHex();
-    public static string PopupTextColor { get; set; } = "#FFFFFF";
-    public static int PopupFontSize { get; set; } = 18;
-    public static double PopupOpacity { get; set; } = 0.90;
+    public static string PopupBackgroundColor { get; set; } = "#000000"; // Pure Black
+    public static string PopupTextColor { get; set; } = "#FFFFFF";       // Pure White
+    public static int PopupFontSize { get; set; } = 18;                  // Size 18
+    public static double PopupOpacity { get; set; } = 0.70;              // 70% opacity
 
     public static void Load()
     {
@@ -38,10 +38,11 @@ public static class LocalPreferences
                 IsFmlFontModeEnabled = GetBoolProperty(doc, nameof(IsFmlFontModeEnabled), false);
                 IsMlFontModeEnabled = GetBoolProperty(doc, nameof(IsMlFontModeEnabled), false);
 
-                PopupBackgroundColor = GetStringProperty(doc, nameof(PopupBackgroundColor), GetSystemAccentColorHex());
+                // Updated defaults in the Load method fallbacks
+                PopupBackgroundColor = GetStringProperty(doc, nameof(PopupBackgroundColor), "#000000");
                 PopupTextColor = GetStringProperty(doc, nameof(PopupTextColor), "#FFFFFF");
                 PopupFontSize = GetIntProperty(doc, nameof(PopupFontSize), 18);
-                PopupOpacity = GetDoubleProperty(doc, nameof(PopupOpacity), 0.90);
+                PopupOpacity = GetDoubleProperty(doc, nameof(PopupOpacity), 0.70);
             }
         }
         catch { /* Fallback to defaults */ }
@@ -74,17 +75,6 @@ public static class LocalPreferences
             PreferencesChanged?.Invoke();
         }
         catch { }
-    }
-
-    private static string GetSystemAccentColorHex()
-    {
-        try
-        {
-            var uiSettings = new Windows.UI.ViewManagement.UISettings();
-            var color = uiSettings.GetColorValue(Windows.UI.ViewManagement.UIColorType.Accent);
-            return $"#{color.R:X2}{color.G:X2}{color.B:X2}";
-        }
-        catch { return "#0078D7"; }
     }
 
     private static bool GetBoolProperty(JsonDocument doc, string propertyName, bool defaultValue)
