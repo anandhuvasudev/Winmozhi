@@ -12,11 +12,13 @@
 	</PropertyGroup>
 
 	<ItemGroup>
-	  <None Remove="Engines\ManglishCorpus.csv" />
+		<!-- FIX (Phase 3): Removed the CSV corpus to stop memory/CPU spikes -->
+		<None Remove="Engines\OfflineCorpus.db" />
 	</ItemGroup>
 
 	<ItemGroup>
-	  <EmbeddedResource Include="Engines\ManglishCorpus.csv" />
+		<!-- Embed the pre-compiled, indexed SQLite dictionary database -->
+		<EmbeddedResource Include="Engines\OfflineCorpus.db" />
 	</ItemGroup>
 
 	<ItemGroup>

@@ -51,7 +51,10 @@ public sealed partial class PopupView : Window
         int cornerPreference = DWMWCP_ROUND;
         DwmSetWindowAttribute(_hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, ref cornerPreference, 4);
 
-        AppWindow.Resize(new Windows.Graphics.SizeInt32(PopupWidth, PopupHeight));
+        // FIX (Phase 5.2): Scale initial Window size in physical pixels, avoiding double scaling bugs
+        uint dpi = GetDpiForWindow(_hwnd);
+        double scale = dpi / 96.0;
+        AppWindow.Resize(new Windows.Graphics.SizeInt32((int)(PopupWidth * scale), (int)(PopupHeight * scale)));
 
         ApplyStoredStyles();
         ViewModel.PropertyChanged += ViewModel_PropertyChanged;
@@ -237,6 +240,9 @@ public sealed partial class PopupView : Window
     // FIX: Import SHCore for DPI scaling mapping
     [LibraryImport("shcore.dll")]
     private static partial int GetDpiForMonitor(IntPtr hmonitor, int dpiType, out uint dpiX, out uint dpiY);
+
+    [LibraryImport("user32.dll")]
+    private static partial uint GetDpiForWindow(IntPtr hwnd); // Added for correct physical bounds measurement
 
     public struct InteropPoint { public int X; public int Y; }
 

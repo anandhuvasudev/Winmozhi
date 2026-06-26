@@ -12,13 +12,14 @@ using Winmozhi.Core.Interfaces;
 
 namespace Winmozhi.UI.ViewModels;
 
-public partial class PopupViewModel : ObservableObject
+public partial class PopupViewModel : ObservableObject, IDisposable
 {
     private readonly ITransliterationEngine _engine;
     private readonly IKeyboardHookService _hookService;
     private readonly IHistoryDatabase _historyDatabase;
     private readonly DispatcherQueue _dispatcher;
-    private int _suggestionRequestVersion;
+
+    private CancellationTokenSource? _typingCts;
 
     [ObservableProperty] public partial string CurrentManglish { get; set; }
     [ObservableProperty] public partial bool IsVisible { get; set; }
@@ -45,6 +46,17 @@ public partial class PopupViewModel : ObservableObject
         _hookService.OnSelectionChangedRequested += HookService_OnSelectionChangedRequested;
     }
 
+    public void Dispose()
+    {
+        _hookService.OnWordTyped -= HookService_OnWordTyped;
+        _hookService.OnInsertRequested -= HookService_OnInsertRequested;
+        _hookService.OnSelectionChangedRequested -= HookService_OnSelectionChangedRequested;
+
+        _typingCts?.Cancel();
+        _typingCts?.Dispose();
+        GC.SuppressFinalize(this);
+    }
+
     private void HookService_OnSelectionChangedRequested(object? sender, int direction)
     {
         _dispatcher.TryEnqueue(() =>
@@ -62,51 +74,68 @@ public partial class PopupViewModel : ObservableObject
 
     private async void HookService_OnWordTyped(object? sender, string word)
     {
+        // Cancel previous request to stop network spam
+        _typingCts?.Cancel();
+        _typingCts?.Dispose();
+        _typingCts = new CancellationTokenSource();
+        var token = _typingCts.Token;
+
         _dispatcher.TryEnqueue(() =>
         {
             CurrentManglish = word;
+            SelectedIndex = 0;
+
             if (string.IsNullOrWhiteSpace(word))
             {
                 Suggestions.Clear();
-                IsVisible = false;
-                _hookService.IsPopupVisible = false;
-                Winmozhi.Core.Utilities.MemoryOptimizer.TrimMemory();
+                if (IsVisible)
+                {
+                    IsVisible = false;
+                    _hookService.IsPopupVisible = false;
+                    Winmozhi.Core.Utilities.MemoryOptimizer.TrimMemory();
+                }
             }
         });
 
-        if (string.IsNullOrWhiteSpace(word))
-        {
-            Interlocked.Increment(ref _suggestionRequestVersion);
-            return;
-        }
-
-        var requestVersion = Interlocked.Increment(ref _suggestionRequestVersion);
+        if (string.IsNullOrWhiteSpace(word)) return;
 
         try
         {
-            var instantResults = (await _engine.GetInstantSuggestionsAsync(word, CancellationToken.None).ConfigureAwait(false)).ToList();
-            if (requestVersion != _suggestionRequestVersion) return;
+            // FIX: Task.Run forces the SQLite Database lookup onto a background thread.
+            // This instantly frees the Windows Keyboard Hook, removing all typing lag!
+            var instantResults = await Task.Run(async () =>
+            {
+                return (await _engine.GetInstantSuggestionsAsync(word, token).ConfigureAwait(false)).ToList();
+            }, token).ConfigureAwait(false);
+
+            if (token.IsCancellationRequested) return;
 
             _dispatcher.TryEnqueue(() =>
             {
-                if (requestVersion != _suggestionRequestVersion) return;
+                if (token.IsCancellationRequested) return;
                 ApplySuggestions(instantResults, preserveSelection: false);
             });
 
-            await Task.Delay(150).ConfigureAwait(false);
-            if (requestVersion != _suggestionRequestVersion) return;
+            // Wait 150ms BEFORE calling the API to prevent network lag
+            await Task.Delay(150, token).ConfigureAwait(false);
 
-            var onlineResults = (await _engine.GetOnlineSuggestionsAsync(word, CancellationToken.None).ConfigureAwait(false)).ToList();
-            if (requestVersion != _suggestionRequestVersion || onlineResults.Count == 0) return;
+            // FIX: Run network parsing on background thread
+            var onlineResults = await Task.Run(async () =>
+            {
+                return (await _engine.GetOnlineSuggestionsAsync(word, token).ConfigureAwait(false)).ToList();
+            }, token).ConfigureAwait(false);
 
-            var merged = MergeSuggestions(instantResults, onlineResults);
+            if (token.IsCancellationRequested || onlineResults.Count == 0) return;
+
+            var merged = await MergeSuggestionsAsync(instantResults, onlineResults, word);
+
             _dispatcher.TryEnqueue(() =>
             {
-                if (requestVersion != _suggestionRequestVersion) return;
+                if (token.IsCancellationRequested) return;
                 ApplySuggestions(merged, preserveSelection: true);
             });
         }
-        catch (OperationCanceledException) { }
+        catch (OperationCanceledException) { /* Ignored, user is typing fast */ }
     }
 
     private void HookService_OnInsertRequested(object? _, string trailingText)
@@ -116,6 +145,9 @@ public partial class PopupViewModel : ObservableObject
 
     public void InsertCurrentSelection(string trailingText)
     {
+        // FIX: Cancel background tasks instantly when space/enter is pressed so the popup doesn't randomly reappear
+        _typingCts?.Cancel();
+
         string manglish = CurrentManglish;
 
         _dispatcher.TryEnqueue(() =>
@@ -161,9 +193,8 @@ public partial class PopupViewModel : ObservableObject
         });
     }
 
-    private static List<string> MergeSuggestions(List<string> instant, List<string> online)
+    private static async Task<List<string>> MergeSuggestionsAsync(List<string> instant, List<string> online, string originalManglish)
     {
-        string originalManglish = instant.Last();
         var result = new List<string>();
 
         if (instant.Count > 1) result.Add(instant[0]);
@@ -175,11 +206,16 @@ public partial class PopupViewModel : ObservableObject
         }
 
         if (!result.Contains(originalManglish, StringComparer.OrdinalIgnoreCase)) result.Add(originalManglish);
-        return result;
+
+        return await Task.FromResult(result);
     }
 
     private void ApplySuggestions(IList<string> suggestions, bool preserveSelection)
     {
+        // FIX: If the new suggestions are exactly the same as the old ones, DO NOT redraw the UI.
+        // This stops the UI from flickering and heavily reduces UI thread lag.
+        if (Suggestions.SequenceEqual(suggestions)) return;
+
         string? highlighted = preserveSelection && SelectedIndex >= 0 && SelectedIndex < Suggestions.Count
             ? Suggestions[SelectedIndex] : null;
 
@@ -188,8 +224,13 @@ public partial class PopupViewModel : ObservableObject
 
         int restoredIndex = highlighted is not null ? Suggestions.IndexOf(highlighted) : -1;
         SelectedIndex = restoredIndex >= 0 ? restoredIndex : 0;
-        IsVisible = Suggestions.Count > 0;
-        _hookService.IsPopupVisible = IsVisible;
+
+        bool shouldBeVisible = Suggestions.Count > 0;
+        if (IsVisible != shouldBeVisible)
+        {
+            IsVisible = shouldBeVisible;
+            _hookService.IsPopupVisible = shouldBeVisible;
+        }
     }
 
     private static string GetForegroundProcessName()
